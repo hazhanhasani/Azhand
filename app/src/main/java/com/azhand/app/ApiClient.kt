@@ -61,6 +61,18 @@ data class PaymentSubmissionData(
     val note: String,
     val status: String,
     val reviewerNote: String,
+    val receiptNo: String,
+    val createdAt: String
+)
+
+data class NotificationData(
+    val id: Long,
+    val type: String,
+    val title: String,
+    val body: String,
+    val entityType: String,
+    val entityId: String,
+    val readAt: String,
     val createdAt: String
 )
 
@@ -74,7 +86,9 @@ data class DashboardData(
     val announcements: List<AnnouncementData>,
     val serviceRequests: List<ServiceRequestData>,
     val expenses: List<ExpenseData>,
-    val paymentSubmissions: List<PaymentSubmissionData>
+    val paymentSubmissions: List<PaymentSubmissionData>,
+    val notifications: List<NotificationData>,
+    val unreadNotifications: Int
 )
 
 class ApiException(val statusCode: Int, message: String) : Exception(message)
@@ -127,6 +141,13 @@ object ApiClient {
                 expenses = parseExpenses(json.optJSONArray("expenses")),
                 paymentSubmissions = parsePaymentSubmissions(
                     json.optJSONArray("payment_submissions")
+                ),
+                notifications = parseNotifications(
+                    json.optJSONArray("notifications")
+                ),
+                unreadNotifications = summary.optInt(
+                    "unread_notifications",
+                    0
                 )
             )
         }
@@ -164,6 +185,21 @@ object ApiClient {
                 .put("amount", amount)
                 .put("reference_id", referenceId)
                 .put("note", note)
+        )
+    }
+
+    suspend fun markNotificationRead(
+        token: String,
+        notificationId: Long
+    ) = withContext(Dispatchers.IO) {
+        requestJson(
+            method = "POST",
+            path = "/api/app/notifications/read",
+            token = token,
+            body = JSONObject().put(
+                "notification_id",
+                notificationId
+            )
         )
     }
 
@@ -315,6 +351,30 @@ object ApiClient {
                         note = j.optString("note"),
                         status = j.optString("status"),
                         reviewerNote = j.optString("reviewer_note"),
+                        receiptNo = j.optString("receipt_no"),
+                        createdAt = j.optString("created_at")
+                    )
+                )
+            }
+        }
+    }
+
+    private fun parseNotifications(
+        array: JSONArray?
+    ): List<NotificationData> {
+        if (array == null) return emptyList()
+        return buildList {
+            for (i in 0 until array.length()) {
+                val j = array.getJSONObject(i)
+                add(
+                    NotificationData(
+                        id = j.optLong("id"),
+                        type = j.optString("type"),
+                        title = j.optString("title"),
+                        body = j.optString("body"),
+                        entityType = j.optString("entity_type"),
+                        entityId = j.optString("entity_id"),
+                        readAt = j.optString("read_at"),
                         createdAt = j.optString("created_at")
                     )
                 )

@@ -187,6 +187,22 @@ private fun AzhandRoot() {
                 updateStatus = updateStatus,
                 updateChecking = updateChecking,
                 onCheckUpdate = { requestUpdateCheck(force = true) },
+                onMarkNotificationRead = { notificationId ->
+                    val current = token
+                    if (current != null) {
+                        scope.launch {
+                            try {
+                                ApiClient.markNotificationRead(
+                                    current,
+                                    notificationId
+                                )
+                                refreshKey++
+                            } catch (_: Exception) {
+                                // Keep the screen usable if marking read fails.
+                            }
+                        }
+                    }
+                },
                 onSubmitPayment = {
                     chargeId,
                     amount,
@@ -396,7 +412,7 @@ private fun LoginScreen(onLoggedIn: (String) -> Unit) {
             }
         }
         Spacer(Modifier.height(18.dp))
-        Text("نسخه ۰.۶.۲", color = TextMuted, fontSize = 11.sp)
+        Text("نسخه ۰.۷.۰", color = TextMuted, fontSize = 11.sp)
     }
 }
 
@@ -409,6 +425,7 @@ private fun ResidentApp(
     updateStatus: String,
     updateChecking: Boolean,
     onCheckUpdate: () -> Unit,
+    onMarkNotificationRead: (Long) -> Unit,
     onSubmitPayment: (
         Long,
         Long,
@@ -451,7 +468,7 @@ private fun ResidentApp(
                     AppTab.HOME -> HomeScreen(dashboard, onRefresh)
                     AppTab.FINANCE -> FinanceScreen(dashboard, onSubmitPayment)
                     AppTab.SERVICES -> ServicesScreen(dashboard, onCreateRequest)
-                    AppTab.NOTICES -> NoticesScreen(dashboard)
+                    AppTab.NOTICES -> NoticesScreen(dashboard, onMarkNotificationRead)
                     AppTab.ACCOUNT -> AccountScreen(
                         dashboard,
                         updateStatus,
@@ -514,7 +531,7 @@ private fun ScreenContainer(
 @Composable
 private fun HomeScreen(data: DashboardData?, onRefresh: () -> Unit) = ScreenContainer(
     title = "آژند",
-    subtitle = "مجتمع تجاری، مسکونی • نسخه ۰.۶.۲"
+    subtitle = "مجتمع تجاری، مسکونی • نسخه ۰.۷.۰"
 ) {
     val profile = data?.profile
     val unitText = when {
@@ -895,6 +912,16 @@ private fun PaymentSubmissionCard(
                 fontSize = 12.sp
             )
 
+            if (payment.receiptNo.isNotBlank()) {
+                Spacer(Modifier.height(7.dp))
+                Text(
+                    "رسید: ${payment.receiptNo}",
+                    color = Gold,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+
             if (payment.reviewerNote.isNotBlank()) {
                 Spacer(Modifier.height(7.dp))
                 Text(
@@ -1037,15 +1064,115 @@ private fun CreateRequestDialog(
 }
 
 @Composable
-private fun NoticesScreen(data: DashboardData?) = ScreenContainer(
+private fun NoticesScreen(
+    data: DashboardData?,
+    onMarkNotificationRead: (Long) -> Unit
+) = ScreenContainer(
     title = "اعلانات",
-    subtitle = "اطلاعیه‌های رسمی مجتمع آژند"
+    subtitle = if ((data?.unreadNotifications ?: 0) > 0) {
+        "${data?.unreadNotifications ?: 0} پیام خوانده‌نشده"
+    } else {
+        "پیام‌های شخصی و اطلاعیه‌های مجتمع"
+    }
 ) {
+    SectionTitle("پیام‌های من")
+
+    val notifications = data?.notifications.orEmpty()
+
+    if (notifications.isEmpty()) {
+        EmptyCard("پیام شخصی جدیدی ندارید.")
+    } else {
+        notifications.forEach { notification ->
+            Card(
+                colors = CardDefaults.cardColors(
+                    containerColor =
+                        if (notification.readAt.isBlank()) {
+                            Surface2
+                        } else {
+                            Surface
+                        }
+                ),
+                shape = RoundedCornerShape(17.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 10.dp)
+            ) {
+                Column(Modifier.padding(16.dp)) {
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement =
+                            Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            notification.title,
+                            color =
+                                if (notification.readAt.isBlank()) {
+                                    Gold
+                                } else {
+                                    TextPrimary
+                                },
+                            fontWeight = FontWeight.Bold
+                        )
+
+                        if (notification.readAt.isBlank()) {
+                            Text(
+                                "جدید",
+                                color = Gold,
+                                fontSize = 11.sp
+                            )
+                        }
+                    }
+
+                    Spacer(Modifier.height(7.dp))
+
+                    Text(
+                        notification.body,
+                        color = TextPrimary,
+                        lineHeight = 21.sp
+                    )
+
+                    if (notification.createdAt.isNotBlank()) {
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            notification.createdAt,
+                            color = TextMuted,
+                            fontSize = 11.sp
+                        )
+                    }
+
+                    if (notification.readAt.isBlank()) {
+                        Spacer(Modifier.height(9.dp))
+                        TextButton(
+                            onClick = {
+                                onMarkNotificationRead(
+                                    notification.id
+                                )
+                            }
+                        ) {
+                            Text("علامت‌گذاری به‌عنوان خوانده‌شده")
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Spacer(Modifier.height(18.dp))
+    SectionTitle("اطلاعیه‌های مجتمع")
+
     val announcements = data?.announcements.orEmpty()
-    if (announcements.isEmpty()) EmptyCard("هنوز اعلانی منتشر نشده است.")
-    else announcements.forEach { notice ->
-        NoticeCard(notice.title, notice.body, notice.publishedAt)
-        Spacer(Modifier.height(10.dp))
+
+    if (announcements.isEmpty()) {
+        EmptyCard("هنوز اعلانی منتشر نشده است.")
+    } else {
+        announcements.forEach { notice ->
+            NoticeCard(
+                notice.title,
+                notice.body,
+                notice.publishedAt
+            )
+            Spacer(Modifier.height(10.dp))
+        }
     }
 }
 
