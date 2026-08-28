@@ -1,4 +1,4 @@
-# Azhand v0.4.8
+# Azhand v0.5.0
 
 پایه‌ی یکپارچه اپلیکیشن مدیریت مجتمع آژند.
 
@@ -7,7 +7,7 @@
 - Kotlin
 - Jetpack Compose
 - Package: `com.azhand.app`
-- Version: `0.4.8`
+- Version: `0.5.0`
 - Debug APK از GitHub Actions ساخته می‌شود.
 - Release فقط وقتی Keystore ثابت در GitHub Secrets ثبت شده باشد ساخته می‌شود.
 
@@ -57,23 +57,23 @@ Schema اپ هنگام اولین درخواست API به صورت idempotent ا
 
 این ZIP را با Caption زیر برای ربات بفرست:
 
-`v0.4.8`
+`v0.5.0`
 
 بعد از موفقیت:
 
 1. GitHub main باید فایل‌های پروژه را داشته باشد.
 2. GitHub Actions باید Android debug APK را Build کند.
-3. Worker باید به 0.4.8 آپدیت شود.
+3. Worker باید به 0.5.0 آپدیت شود.
 4. مسیر `/app` باید PWA آژند را نشان دهد.
 5. مسیر `/api/app/health` باید `ok: true` برگرداند.
 
 
-## Fix v0.4.8 — GitHub workflow permission
+## Fix v0.5.0 — GitHub workflow permission
 
 v0.4.0 reached the local commit stage, but GitHub rejected the push because
 the release tried to create `.github/workflows/android-build.yml`.
 
-v0.4.8 fixes that by:
+v0.5.0 fixes that by:
 
 - excluding `.github/workflows/**` from ZIP synchronization;
 - removing the separate `android-build.yml` from the release package;
@@ -82,13 +82,13 @@ v0.4.8 fixes that by:
 - building the Android debug APK inside `azhand-release.yml`;
 - uploading the APK as a GitHub Actions artifact.
 
-After v0.4.8 deploys, open `/setup` and save once to update the GitHub release
-workflow. Then send v0.4.8 again to test the integrated Android build.
+After v0.5.0 deploys, open `/setup` and save once to update the GitHub release
+workflow. Then send v0.5.0 again to test the integrated Android build.
 
 
-## v0.4.8 — Self-healing release/build pipeline
+## v0.5.0 — Self-healing release/build pipeline
 
-From v0.4.8 onward, before every normal ZIP release the Telegram Worker uses
+From v0.5.0 onward, before every normal ZIP release the Telegram Worker uses
 its saved GitHub fine-grained PAT to create/update the single stable release
 workflow. Normal ZIPs never modify `.github/workflows/*`.
 
@@ -97,18 +97,18 @@ changes can be shipped inside the ZIP without changing GitHub workflow files.
 
 ### One-time bridge from the currently deployed v0.4.1 Worker
 
-The currently active v0.4.1 code cannot use features that only exist in v0.4.8
-before v0.4.8 has been deployed.
+The currently active v0.4.1 code cannot use features that only exist in v0.5.0
+before v0.5.0 has been deployed.
 
-1. Send `Azhand-v0.4.8.zip` once.
+1. Send `Azhand-v0.5.0.zip` once.
 2. After the bot reports that the Worker updated, send `/build`.
 
-`/build` reuses the same v0.4.8 ZIP already stored in KV, updates the GitHub
+`/build` reuses the same v0.5.0 ZIP already stored in KV, updates the GitHub
 workflow automatically, and starts Android build. After that, every later ZIP
 builds Android automatically on its first upload, with no `/setup` step.
 
 
-## v0.4.8 — D1-independent build recovery
+## v0.5.0 — D1-independent build recovery
 
 Fixes:
 
@@ -126,14 +126,14 @@ Changes:
 
 For the currently deployed v0.4.2 bridge:
 
-1. Send `Azhand-v0.4.8.zip`.
+1. Send `Azhand-v0.5.0.zip`.
 2. Wait for Worker auto-deploy.
 3. Send `/build`.
 
-After v0.4.8 is active, normal future ZIP uploads auto-build on the first try.
+After v0.5.0 is active, normal future ZIP uploads auto-build on the first try.
 
 
-## v0.4.8 — lossless workflow embedding
+## v0.5.0 — lossless workflow embedding
 
 Fixes the GitHub Actions failure:
 
@@ -144,7 +144,7 @@ the Cloudflare Worker stored the GitHub workflow inside a JavaScript template
 literal. Bash and Python backslashes were modified while JavaScript evaluated
 that string.
 
-v0.4.8 stores the complete workflow as Base64 and decodes it at runtime.
+v0.5.0 stores the complete workflow as Base64 and decodes it at runtime.
 The workflow GitHub receives is therefore byte-for-byte the workflow tested
 during packaging.
 
@@ -158,13 +158,13 @@ Additional validation before packaging:
 
 ### One-time recovery
 
-The currently deployed pre-v0.4.8 Worker will keep writing the broken workflow
-before every dispatch. Therefore deploy `worker.js` from v0.4.8 to Cloudflare
-once. After that, send `Azhand-v0.4.8.zip` normally. Future workflow updates
+The currently deployed pre-v0.5.0 Worker will keep writing the broken workflow
+before every dispatch. Therefore deploy `worker.js` from v0.5.0 to Cloudflare
+once. After that, send `Azhand-v0.5.0.zip` normally. Future workflow updates
 are automatic again.
 
 
-## v0.4.8 — Android JVM target fix
+## v0.5.0 — Android JVM target fix
 
 Fixes GitHub Actions failure:
 
@@ -177,13 +177,13 @@ Changes:
 - Java targetCompatibility = 17
 - Kotlin JVM toolchain = 17
 - Android versionCode = 9
-- Android versionName = 0.4.8
+- Android versionName = 0.5.0
 
 The GitHub runner already uses Temurin Java 17, so Java and Kotlin now target
 the same JVM level.
 
 
-## v0.4.8 — In-app Android updater
+## v0.5.0 — In-app Android updater
 
 The Android app now checks the Azhand Worker on launch and shows an update
 dialog when a newer signed release exists.
@@ -221,18 +221,18 @@ app cannot silently replace itself.
 
 ### One-time transition
 
-1. Send v0.4.8 so the Worker updates.
+1. Send v0.5.0 so the Worker updates.
 2. Add the four signing secrets from the signing bundle.
 3. Send `/build` once.
-4. Install the signed v0.4.8 from `/app-update/latest.apk`.
-5. From v0.4.8 onward, the release app detects updates itself.
+4. Install the signed v0.5.0 from `/app-update/latest.apk`.
+5. From v0.5.0 onward, the release app detects updates itself.
 
 
-## v0.4.8 — automatic Android signing
+## v0.5.0 — automatic Android signing
 
 No GitHub Android signing secrets are required.
 
-On the first v0.4.8 build, GitHub Actions automatically creates the permanent
+On the first v0.5.0 build, GitHub Actions automatically creates the permanent
 Azhand JKS signing identity and stores it in Cloudflare KV. Future builds
 retrieve and reuse exactly the same signing identity.
 
@@ -243,11 +243,11 @@ The app update pipeline remains:
 signed APK -> Cloudflare KV -> `/api/app/update` -> in-app download/install.
 
 One-time bridge from the older Worker:
-send v0.4.8, wait for Worker deploy, then send `/build` once. After that normal
+send v0.5.0, wait for Worker deploy, then send `/build` once. After that normal
 future ZIP releases require no manual signing setup.
 
 
-## v0.4.8 — release token pipeline hardening
+## v0.5.0 — release token pipeline hardening
 
 Fixes Run #10:
 
@@ -270,3 +270,20 @@ Release workflow validation performed before packaging:
 - Python compile on every Python run block
 - static token assignment checks
 - checks preventing short-lived token expressions from appearing in step env
+
+
+## v0.5.0 — resident accounts + real D1 data
+
+New:
+- `/manage`
+- `POST /api/app/auth/login`
+- `POST /api/app/auth/logout`
+- `GET /api/app/dashboard`
+- `POST /api/app/service-requests`
+- `GET /api/admin/overview`
+- `POST /api/admin/member`
+- `POST /api/admin/charge`
+- `POST /api/admin/announcement`
+
+No new Cloudflare or GitHub secrets are required.
+Existing `SETUP_ADMIN_KEY` protects manager APIs.

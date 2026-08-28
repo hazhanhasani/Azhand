@@ -1,129 +1,40 @@
 <!doctype html>
 <html lang="fa" dir="rtl">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#07111f">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="آژند">
-<link rel="manifest" href="/manifest.webmanifest">
-<link rel="apple-touch-icon" href="/icon-192.png">
-<title>آژند</title>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#07111f"><meta name="apple-mobile-web-app-capable" content="yes">
+<link rel="manifest" href="/manifest.webmanifest"><link rel="apple-touch-icon" href="/icon-192.png"><title>آژند</title>
 <style>
-:root{--bg:#07111f;--surface:#0e1b2d;--surface2:#13233a;--gold:#e4b84b;--text:#f3f7fc;--muted:#aab8cb;--danger:#ff7783;--ok:#4dd39a}
-*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-body{margin:0;background:var(--bg);color:var(--text);font-family:Tahoma,Arial,sans-serif;min-height:100vh}
-#app{max-width:680px;margin:auto;min-height:100vh;padding-bottom:86px}
-header{padding:24px 18px 12px;background:linear-gradient(180deg,#0d1d32 0%,#07111f 100%)}
-.brand{display:flex;align-items:center;gap:12px}.brand img{width:52px;height:52px;border-radius:16px}
-.brand h1{font-size:23px;margin:0}.brand p{margin:4px 0 0;color:var(--muted);font-size:12px}
-main{padding:14px 16px 24px}.card{background:var(--surface);border:1px solid #203650;border-radius:22px;padding:18px;margin-bottom:12px}
-.balance{font-size:22px;font-weight:800;color:var(--danger);margin:7px 0 15px}
-.btn{width:100%;border:0;border-radius:14px;background:var(--gold);color:var(--bg);padding:14px;font-weight:800;font-size:15px}
-.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.mini{background:var(--surface2);border-radius:17px;padding:15px}.mini b{display:block;font-size:20px;margin-top:7px}.muted{color:var(--muted);font-size:12px}
-h2{font-size:16px;margin:20px 3px 10px}.item{display:flex;gap:11px;align-items:center;background:var(--surface);border:1px solid #203650;border-radius:16px;padding:14px;margin-bottom:9px}.dot{width:9px;height:9px;border-radius:50%;background:var(--gold);flex:0 0 auto}.item .txt{flex:1}.item b{display:block;font-size:14px}.item span{display:block;color:var(--muted);font-size:11px;margin-top:4px;line-height:1.5}.chev{color:var(--gold);font-size:23px}
-.notice{background:var(--surface2);border-radius:17px;padding:15px}.notice b{color:var(--gold)}.notice p{line-height:1.8;margin:8px 0}.notice small{color:var(--muted)}
-nav{position:fixed;bottom:0;left:0;right:0;background:#0b1727eF;backdrop-filter:blur(16px);border-top:1px solid #203650;padding:8px max(8px,env(safe-area-inset-right)) calc(8px + env(safe-area-inset-bottom)) max(8px,env(safe-area-inset-left));display:flex;justify-content:center;z-index:10}
-.navinner{width:min(680px,100%);display:grid;grid-template-columns:repeat(5,1fr);gap:3px}
-.navbtn{border:0;background:transparent;color:var(--muted);padding:8px 4px;border-radius:13px;font-size:11px}.navbtn strong{display:block;font-size:17px;margin-bottom:3px}.navbtn.active{background:#e4b84b18;color:var(--gold)}
-.view{display:none}.view.active{display:block}.row{display:flex;justify-content:space-between;gap:12px;padding:13px 2px;border-bottom:1px solid #203650}.row:last-child{border:0}.status-ok{color:var(--ok)}.status-bad{color:var(--danger)}
-.install{display:none;margin:0 16px 10px;background:#14253d;border:1px dashed #476482;padding:12px;border-radius:14px;color:var(--muted);font-size:12px;line-height:1.8}
-</style>
-</head>
-<body>
-<div id="app">
-<header>
-  <div class="brand">
-    <img src="/icon-192.png" alt="آژند">
-    <div><h1>آژند</h1><p>مجتمع تجاری، مسکونی • نسخه ۰.۴.۰</p></div>
-  </div>
-</header>
-<div id="iosInstall" class="install">برای نصب روی iPhone: از Share گزینه <b>Add to Home Screen</b> را بزن.</div>
-<main>
-<section id="home" class="view active">
-  <div class="card">
-    <div class="muted">سلام 👋</div>
-    <h3 style="font-size:21px;margin:5px 0 17px">واحد ۳۰۵</h3>
-    <div class="muted">مانده حساب</div>
-    <div class="balance">۳٬۰۰۰٬۰۰۰ تومان بدهکار</div>
-    <button class="btn">پرداخت شارژ</button>
-  </div>
-  <div class="grid">
-    <div class="mini"><span class="muted">شارژ شهریور</span><b>۲٫۵ م</b><span class="muted">تومان</span></div>
-    <div class="mini"><span class="muted">درخواست باز</span><b>۱</b><span class="muted">مورد</span></div>
-  </div>
-  <h2>دسترسی سریع</h2>
-  <div class="item"><i class="dot"></i><div class="txt"><b>صورتحساب و ریز هزینه‌ها</b><span>مشاهده جزئیات مالی واحد</span></div><div class="chev">‹</div></div>
-  <div class="item"><i class="dot"></i><div class="txt"><b>ثبت درخواست خدمات</b><span>خرابی، نظافت، تأسیسات و سایر موارد</span></div><div class="chev">‹</div></div>
-  <div class="item"><i class="dot"></i><div class="txt"><b>اعلانات ساختمان</b><span>آخرین اطلاعیه‌های مدیریت</span></div><div class="chev">‹</div></div>
-  <h2>آخرین اعلان</h2>
-  <div class="notice"><b>جلسه هیئت‌مدیره</b><p>پنجشنبه ساعت ۲۰ جلسه ماهانه مجتمع برگزار می‌شود.</p><small>امروز • مدیریت مجتمع</small></div>
-</section>
-
-<section id="finance" class="view">
-  <h2 style="margin-top:4px">مالی</h2>
-  <div class="card">
-    <div class="row"><span>شارژ شهریور</span><b class="status-bad">۲٬۵۰۰٬۰۰۰ تومان</b></div>
-    <div class="row"><span>بدهی قبلی</span><b class="status-bad">۵۰۰٬۰۰۰ تومان</b></div>
-    <div class="row"><span>پرداخت مرداد</span><b class="status-ok">پرداخت شد</b></div>
-  </div>
-  <h2>هزینه‌های اخیر ساختمان</h2>
-  <div class="card">
-    <div class="row"><span>برق مشاعات</span><span class="muted">۸٬۴۰۰٬۰۰۰ تومان</span></div>
-    <div class="row"><span>نظافت</span><span class="muted">۱۲٬۰۰۰٬۰۰۰ تومان</span></div>
-    <div class="row"><span>تعمیر آسانسور</span><span class="muted">۶٬۸۰۰٬۰۰۰ تومان</span></div>
-  </div>
-</section>
-
-<section id="services" class="view">
-  <h2 style="margin-top:4px">خدمات</h2>
-  <div class="item"><i class="dot"></i><div class="txt"><b>ثبت درخواست جدید</b><span>یک مشکل یا درخواست خدماتی ثبت کنید</span></div><div class="chev">‹</div></div>
-  <div class="item"><i class="dot"></i><div class="txt"><b>درخواست‌های من</b><span>پیگیری وضعیت درخواست‌های قبلی</span></div><div class="chev">‹</div></div>
-  <div class="item"><i class="dot"></i><div class="txt"><b>رزرو امکانات</b><span>در نسخه بعد فعال می‌شود</span></div><div class="chev">‹</div></div>
-</section>
-
-<section id="notices" class="view">
-  <h2 style="margin-top:4px">اعلانات</h2>
-  <div class="notice" style="margin-bottom:10px"><b>جلسه هیئت‌مدیره</b><p>پنجشنبه ساعت ۲۰ جلسه ماهانه برگزار می‌شود.</p><small>امروز</small></div>
-  <div class="notice" style="margin-bottom:10px"><b>سرویس آسانسور</b><p>آسانسور بلوک A فردا بین ساعت ۱۰ تا ۱۲ سرویس می‌شود.</p><small>دیروز</small></div>
-  <div class="notice"><b>یادآوری شارژ</b><p>مهلت پرداخت شارژ شهریور تا پایان هفته است.</p><small>۳ روز پیش</small></div>
-</section>
-
-<section id="account" class="view">
-  <h2 style="margin-top:4px">حساب من</h2>
-  <div class="card">
-    <div class="row"><span class="muted">نام</span><b>کاربر آژند</b></div>
-    <div class="row"><span class="muted">واحد</span><b>۳۰۵</b></div>
-    <div class="row"><span class="muted">نوع عضویت</span><b>مالک</b></div>
-    <div class="row"><span class="muted">نسخه</span><b>۰.۴.۰</b></div>
-  </div>
-</section>
-</main>
-</div>
-
-<nav><div class="navinner">
-<button class="navbtn active" data-view="home"><strong>⌂</strong>خانه</button>
-<button class="navbtn" data-view="finance"><strong>﷼</strong>مالی</button>
-<button class="navbtn" data-view="services"><strong>⚙</strong>خدمات</button>
-<button class="navbtn" data-view="notices"><strong>●</strong>اعلانات</button>
-<button class="navbtn" data-view="account"><strong>◉</strong>حساب</button>
-</div></nav>
-
+:root{--bg:#07111f;--s:#0e1b2d;--s2:#13233a;--g:#e4b84b;--t:#f3f7fc;--m:#aab8cb;--bad:#ff7783;--ok:#4dd39a}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--t);font-family:Tahoma,Arial,sans-serif}.w{max-width:680px;margin:auto;padding:20px 16px 100px}
+h1{color:var(--g);margin-bottom:4px}.card{background:var(--s);border:1px solid #203650;border-radius:18px;padding:17px;margin-bottom:12px}.muted{color:var(--m);font-size:12px}
+input,textarea{width:100%;background:#0b1727;color:var(--t);border:1px solid #29435f;border-radius:12px;padding:12px;margin-top:8px;font:inherit}
+button{border:0;border-radius:12px;padding:12px;font:inherit;font-weight:800}.primary{background:var(--g);color:var(--bg);width:100%}.ghost{background:#14253d;color:var(--t)}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.mini{background:var(--s2);border-radius:16px;padding:15px}.mini b{display:block;font-size:18px;margin-top:6px}
+.row{display:flex;justify-content:space-between;gap:10px;padding:11px 0;border-bottom:1px solid #203650}.row:last-child{border:0}.notice{background:var(--s2);padding:15px;border-radius:16px;margin-bottom:10px}
+.hidden{display:none!important}.view{display:none}.view.active{display:block}.bad{color:var(--bad)}.ok{color:var(--ok)}
+nav{position:fixed;bottom:0;left:0;right:0;background:#0b1727ef;border-top:1px solid #203650;padding:8px 8px calc(8px + env(safe-area-inset-bottom));z-index:20}
+.nav{max-width:680px;margin:auto;display:grid;grid-template-columns:repeat(5,1fr)}.nav button{background:transparent;color:var(--m);font-size:11px}.nav button.active{color:var(--g);background:#e4b84b14}
+</style></head>
+<body><div class="w"><h1>آژند</h1><p class="muted">مجتمع تجاری، مسکونی • نسخه ۰.۵.۰</p>
+<section id="login"><div class="card"><h2>ورود ساکنین</h2><input id="mobile" inputmode="tel" placeholder="شماره موبایل"><input id="code" inputmode="numeric" maxlength="6" placeholder="کد دسترسی ۶ رقمی"><p id="loginError" class="bad muted"></p><button class="primary" onclick="login()">ورود</button></div></section>
+<section id="app" class="hidden">
+<section id="home" class="view active"><h2>خانه</h2><div class="card"><div id="hello" class="muted">سلام</div><h3 id="unitTitle">واحد —</h3><div class="muted">مانده حساب</div><h2 id="balance">—</h2><button class="ghost" onclick="loadDashboard()">بروزرسانی</button></div><div class="grid"><div class="mini"><span class="muted">آخرین شارژ</span><b id="currentCharge">—</b></div><div class="mini"><span class="muted">درخواست باز</span><b id="openRequests">۰</b></div></div><h3>آخرین اعلان</h3><div id="homeNotice"></div></section>
+<section id="finance" class="view"><h2>مالی</h2><div id="charges"></div><h3>هزینه‌های اخیر</h3><div id="expenses" class="card"></div></section>
+<section id="services" class="view"><h2>خدمات</h2><div class="card"><input id="reqCategory" value="تأسیسات" placeholder="دسته‌بندی"><input id="reqTitle" placeholder="عنوان"><textarea id="reqDescription" rows="4" placeholder="توضیحات"></textarea><button class="primary" onclick="createRequest()">ثبت درخواست</button><p id="requestResult" class="muted"></p></div><div id="requests"></div></section>
+<section id="notices" class="view"><h2>اعلانات</h2><div id="noticesList"></div></section>
+<section id="account" class="view"><h2>حساب من</h2><div id="profile" class="card"></div><button class="ghost" style="width:100%" onclick="logout()">خروج از حساب</button></section>
+</section></div>
+<nav id="nav" class="hidden"><div class="nav"><button class="active" data-view="home">⌂<br>خانه</button><button data-view="finance">﷼<br>مالی</button><button data-view="services">⚙<br>خدمات</button><button data-view="notices">●<br>اعلانات</button><button data-view="account">◉<br>حساب</button></div></nav>
 <script>
-for(const b of document.querySelectorAll('.navbtn')){
- b.addEventListener('click',()=>{
-  document.querySelectorAll('.navbtn').forEach(x=>x.classList.remove('active'));
-  document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));
-  b.classList.add('active');
-  document.getElementById(b.dataset.view).classList.add('active');
-  window.scrollTo({top:0,behavior:'smooth'});
- });
-}
-if(/iphone|ipad|ipod/i.test(navigator.userAgent) && !window.navigator.standalone){
- document.getElementById('iosInstall').style.display='block';
-}
-if('serviceWorker' in navigator){navigator.serviceWorker.register('/sw.js').catch(()=>{});}
-</script>
-</body>
-</html>
+const money=n=>new Intl.NumberFormat('fa-IR').format(Number(n||0))+' تومان',tok=()=>localStorage.getItem('azhand_token')||'',esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+async function api(path,o={}){const h={'Content-Type':'application/json','Accept':'application/json',...(o.headers||{})};if(tok())h.Authorization='Bearer '+tok();const r=await fetch(path,{...o,headers:h});const j=await r.json().catch(()=>({}));if(r.status===401){doLogout();throw new Error('نشست منقضی شده است.')}if(!r.ok||j.ok===false)throw new Error(j.error||'خطای سرور');return j}
+async function login(){loginError.textContent='';try{const j=await api('/api/app/auth/login',{method:'POST',body:JSON.stringify({mobile:mobile.value,access_code:code.value})});localStorage.setItem('azhand_token',j.token);await loadDashboard()}catch(e){loginError.textContent=e.message}}
+function doLogout(){localStorage.removeItem('azhand_token');login.classList.remove('hidden');app.classList.add('hidden');nav.classList.add('hidden')}
+async function logout(){try{await api('/api/app/auth/logout',{method:'POST',body:'{}'})}catch{}doLogout()}
+const notice=n=>'<div class="notice"><b>'+esc(n.title)+'</b><p>'+esc(n.body)+'</p><small class="muted">'+esc(n.published_at||'')+'</small></div>';
+async function loadDashboard(){if(!tok()){doLogout();return}const j=await api('/api/app/dashboard');login.classList.add('hidden');app.classList.remove('hidden');nav.classList.remove('hidden');const p=j.profile||{},s=j.summary||{},due=Number(s.total_due||0);hello.textContent='سلام '+(p.full_name||'')+' 👋';unitTitle.textContent=(p.block?'بلوک '+p.block+' • ':'')+'واحد '+(p.unit_number||'—');balance.innerHTML='<span class="'+(due?'bad':'ok')+'">'+(due?money(due)+' بدهکار':'تسویه')+'</span>';currentCharge.textContent=money(s.current_charge_amount||0);openRequests.textContent=new Intl.NumberFormat('fa-IR').format(s.open_requests||0);const a=j.announcements||[];homeNotice.innerHTML=a[0]?notice(a[0]):'<div class="card muted">اعلانی ثبت نشده.</div>';noticesList.innerHTML=a.length?a.map(notice).join(''):'<div class="card muted">اعلانی ثبت نشده.</div>';const c=j.charges||[];charges.innerHTML=c.length?c.map(x=>{const r=Math.max(0,Number(x.amount)-Number(x.paid_amount));return '<div class="card"><div class="row"><b>'+esc(x.title)+'</b><span class="'+(r?'bad':'ok')+'">'+(r?money(r):'پرداخت شد')+'</span></div></div>'}).join(''):'<div class="card muted">شارژی ثبت نشده.</div>';const e=j.expenses||[];expenses.innerHTML=e.length?e.map(x=>'<div class="row"><span>'+esc(x.title)+'</span><span class="muted">'+money(x.amount)+'</span></div>').join(''):'<span class="muted">هزینه‌ای ثبت نشده.</span>';const q=j.service_requests||[];requests.innerHTML=q.length?q.map(x=>'<div class="card"><b>'+esc(x.title)+'</b><p class="muted">'+esc(x.category)+' • '+esc(x.status)+'</p><p>'+esc(x.description||'')+'</p></div>').join(''):'<div class="card muted">درخواستی ثبت نشده.</div>';profile.innerHTML=[['نام',p.full_name],['موبایل',p.mobile],['واحد',p.unit_number],['بلوک',p.block||'—'],['عضویت',p.relation]].map(x=>'<div class="row"><span class="muted">'+esc(x[0])+'</span><b>'+esc(x[1]||'—')+'</b></div>').join('')}
+async function createRequest(){requestResult.textContent='در حال ثبت...';try{await api('/api/app/service-requests',{method:'POST',body:JSON.stringify({category:reqCategory.value,title:reqTitle.value,description:reqDescription.value})});requestResult.textContent='✅ ثبت شد';reqTitle.value='';reqDescription.value='';await loadDashboard()}catch(e){requestResult.textContent=e.message}}
+document.querySelectorAll('.nav button').forEach(b=>b.onclick=()=>{document.querySelectorAll('.nav button').forEach(x=>x.classList.remove('active'));document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));b.classList.add('active');document.getElementById(b.dataset.view).classList.add('active');scrollTo(0,0)});
+if('serviceWorker'in navigator)navigator.serviceWorker.register('/sw.js').catch(()=>{});if(tok())loadDashboard().catch(()=>doLogout());
+</script></body></html>

@@ -7,19 +7,23 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.platform.LocalLayoutDirection
-import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.launch
+import java.text.NumberFormat
+import java.util.Locale
 
 private val Navy = Color(0xFF07111F)
 private val Surface = Color(0xFF0E1B2D)
@@ -45,7 +49,7 @@ class MainActivity : ComponentActivity() {
                         onSurface = TextPrimary
                     )
                 ) {
-                    AzhandApp()
+                    AzhandRoot()
                 }
             }
         }
@@ -61,10 +65,16 @@ private enum class AppTab(val label: String, val emoji: String) {
 }
 
 @Composable
-private fun AzhandApp() {
+private fun AzhandRoot() {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var selected by remember { mutableStateOf(AppTab.HOME) }
+
+    var token by remember { mutableStateOf(SessionStore.getToken(context)) }
+    var dashboard by remember { mutableStateOf<DashboardData?>(null) }
+    var dashboardLoading by remember { mutableStateOf(token != null) }
+    var dashboardError by remember { mutableStateOf<String?>(null) }
+    var refreshKey by remember { mutableIntStateOf(0) }
+
     var updateInfo by remember { mutableStateOf<AppUpdateInfo?>(null) }
     var updateBusy by remember { mutableStateOf(false) }
     var updateMessage by remember { mutableStateOf<String?>(null) }
@@ -73,13 +83,252 @@ private fun AzhandApp() {
         updateInfo = runCatching { UpdateManager.checkForUpdate() }.getOrNull()
     }
 
+    LaunchedEffect(token, refreshKey) {
+        val current = token
+        if (current == null) {
+            dashboard = null
+            dashboardLoading = false
+            dashboardError = null
+            return@LaunchedEffect
+        }
+
+        dashboardLoading = true
+        dashboardError = null
+
+        try {
+            dashboard = ApiClient.dashboard(current)
+        } catch (e: ApiException) {
+            if (e.statusCode == 401) {
+                SessionStore.clear(context)
+                token = null
+                dashboard = null
+            } else {
+                dashboardError = e.message
+            }
+        } catch (_: Exception) {
+            dashboardError = "ارتباط با سرور برقرار نشد."
+        } finally {
+            dashboardLoading = false
+        }
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Navy)
+    ) {
+        if (token == null) {
+            LoginScreen(
+                onLoggedIn = { newToken ->
+                    SessionStore.setToken(context, newToken)
+                    token = newToken
+                    refreshKey++
+                }
+            )
+        } else {
+            ResidentApp(
+                dashboard = dashboard,
+                loading = dashboardLoading,
+                error = dashboardError,
+                onRefresh = { refreshKey++ },
+                onCreateRequest = { category, title, description, done ->
+                    val current = token
+                    if (current == null) {
+                        done(false, "نشست کاربری معتبر نیست.")
+                    } else {
+                        scope.launch {
+                            try {
+                                ApiClient.createServiceRequest(
+                                    current,
+                                    category,
+                                    title,
+                                    description
+                                )
+                                refreshKey++
+                                done(true, null)
+                            } catch (e: Exception) {
+                                done(false, e.message ?: "ثبت درخواست ناموفق بود.")
+                            }
+                        }
+                    }
+                },
+                onLogout = {
+                    val current = token
+                    SessionStore.clear(context)
+                    token = null
+                    dashboard = null
+                    if (current != null) {
+                        scope.launch { ApiClient.logout(current) }
+                    }
+                }
+            )
+        }
+    }
+
+    val availableUpdate = updateInfo
+    if (availableUpdate != null) {
+        AlertDialog(
+            onDismissRequest = {
+                if (!updateBusy && !availableUpdate.mandatory) updateInfo = null
+            },
+            title = { Text("نسخه جدید آژند آماده است") },
+            text = {
+                Column {
+                    Text("نسخه ${availableUpdate.versionName} آماده دانلود و نصب است.")
+                    Spacer(Modifier.height(8.dp))
+                    Text(availableUpdate.notes, color = TextMuted, fontSize = 13.sp)
+                    if (updateMessage != null) {
+                        Spacer(Modifier.height(10.dp))
+                        Text(updateMessage!!, color = Gold, fontSize = 12.sp)
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = !updateBusy,
+                    onClick = {
+                        scope.launch {
+                            updateBusy = true
+                            updateMessage = "در حال دانلود و بررسی فایل..."
+                            try {
+                                val apk = UpdateManager.downloadUpdate(context, availableUpdate)
+                                val started = UpdateManager.startInstaller(context, apk)
+                                updateMessage = if (started) {
+                                    "نصب‌کننده اندروید باز شد."
+                                } else {
+                                    "مجوز نصب برنامه‌های ناشناس را برای آژند فعال کن و دوباره بروزرسانی را بزن."
+                                }
+                            } catch (_: Exception) {
+                                updateMessage = "دانلود یا بررسی بروزرسانی ناموفق بود. دوباره تلاش کن."
+                            } finally {
+                                updateBusy = false
+                            }
+                        }
+                    }
+                ) {
+                    Text(if (updateBusy) "در حال دانلود..." else "دانلود و نصب")
+                }
+            },
+            dismissButton = {
+                if (!availableUpdate.mandatory) {
+                    TextButton(enabled = !updateBusy, onClick = { updateInfo = null }) {
+                        Text("بعداً")
+                    }
+                }
+            },
+            containerColor = Surface
+        )
+    }
+}
+
+@Composable
+private fun LoginScreen(onLoggedIn: (String) -> Unit) {
+    val scope = rememberCoroutineScope()
+    var mobile by remember { mutableStateOf("") }
+    var code by remember { mutableStateOf("") }
+    var busy by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(22.dp),
+        verticalArrangement = Arrangement.Center
+    ) {
+        Text("آژند", color = Gold, fontWeight = FontWeight.Bold, fontSize = 34.sp)
+        Spacer(Modifier.height(5.dp))
+        Text("سامانه مجتمع تجاری، مسکونی", color = TextMuted, fontSize = 13.sp)
+        Spacer(Modifier.height(30.dp))
+
+        Card(
+            colors = CardDefaults.cardColors(containerColor = Surface),
+            shape = RoundedCornerShape(24.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(Modifier.padding(20.dp)) {
+                Text("ورود ساکنین", color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                Spacer(Modifier.height(6.dp))
+                Text("شماره موبایل و کد دسترسی واحد را وارد کنید.", color = TextMuted, fontSize = 12.sp)
+                Spacer(Modifier.height(18.dp))
+
+                OutlinedTextField(
+                    value = mobile,
+                    onValueChange = { mobile = it.take(16) },
+                    label = { Text("شماره موبایل") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(Modifier.height(12.dp))
+                OutlinedTextField(
+                    value = code,
+                    onValueChange = { code = it.filter(Char::isDigit).take(6) },
+                    label = { Text("کد دسترسی ۶ رقمی") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                if (error != null) {
+                    Spacer(Modifier.height(10.dp))
+                    Text(error!!, color = Danger, fontSize = 12.sp)
+                }
+
+                Spacer(Modifier.height(18.dp))
+                Button(
+                    enabled = !busy && mobile.isNotBlank() && code.length == 6,
+                    onClick = {
+                        scope.launch {
+                            busy = true
+                            error = null
+                            try {
+                                onLoggedIn(ApiClient.login(mobile.trim(), code).token)
+                            } catch (e: ApiException) {
+                                error = when (e.statusCode) {
+                                    401 -> "شماره موبایل یا کد دسترسی اشتباه است."
+                                    429 -> "تلاش‌های زیادی انجام شده؛ چند دقیقه بعد دوباره امتحان کنید."
+                                    else -> e.message ?: "ورود ناموفق بود."
+                                }
+                            } catch (_: Exception) {
+                                error = "ارتباط با سرور برقرار نشد."
+                            } finally {
+                                busy = false
+                            }
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Gold, contentColor = Navy),
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    if (busy) {
+                        CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp, color = Navy)
+                    } else {
+                        Text("ورود", fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+        Spacer(Modifier.height(18.dp))
+        Text("نسخه ۰.۵.۰", color = TextMuted, fontSize = 11.sp)
+    }
+}
+
+@Composable
+private fun ResidentApp(
+    dashboard: DashboardData?,
+    loading: Boolean,
+    error: String?,
+    onRefresh: () -> Unit,
+    onCreateRequest: (String, String, String, (Boolean, String?) -> Unit) -> Unit,
+    onLogout: () -> Unit
+) {
+    var selected by remember { mutableStateOf(AppTab.HOME) }
+
     Scaffold(
         containerColor = Navy,
         bottomBar = {
-            NavigationBar(
-                containerColor = Surface,
-                tonalElevation = 0.dp
-            ) {
+            NavigationBar(containerColor = Surface, tonalElevation = 0.dp) {
                 AppTab.entries.forEach { tab ->
                     NavigationBarItem(
                         selected = selected == tab,
@@ -98,90 +347,45 @@ private fun AzhandApp() {
             }
         }
     ) { padding ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Navy)
-                .padding(padding)
-        ) {
-            when (selected) {
-                AppTab.HOME -> DashboardScreen()
-                AppTab.FINANCE -> FinanceScreen()
-                AppTab.SERVICES -> ServicesScreen()
-                AppTab.NOTICES -> NoticesScreen()
-                AppTab.ACCOUNT -> AccountScreen()
+        Box(Modifier.fillMaxSize().background(Navy).padding(padding)) {
+            when {
+                loading && dashboard == null -> LoadingScreen()
+                error != null && dashboard == null -> ErrorScreen(error, onRefresh)
+                else -> when (selected) {
+                    AppTab.HOME -> HomeScreen(dashboard, onRefresh)
+                    AppTab.FINANCE -> FinanceScreen(dashboard)
+                    AppTab.SERVICES -> ServicesScreen(dashboard, onCreateRequest)
+                    AppTab.NOTICES -> NoticesScreen(dashboard)
+                    AppTab.ACCOUNT -> AccountScreen(dashboard, onLogout)
+                }
             }
         }
     }
+}
 
-    val availableUpdate = updateInfo
-    if (availableUpdate != null) {
-        AlertDialog(
-            onDismissRequest = {
-                if (!updateBusy && !availableUpdate.mandatory) {
-                    updateInfo = null
-                }
-            },
-            title = { Text("نسخه جدید آژند آماده است") },
-            text = {
-                Column {
-                    Text("نسخه ${availableUpdate.versionName} آماده دانلود و نصب است.")
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        availableUpdate.notes,
-                        color = TextMuted,
-                        fontSize = 13.sp
-                    )
-                    if (updateMessage != null) {
-                        Spacer(Modifier.height(10.dp))
-                        Text(updateMessage!!, color = Gold, fontSize = 12.sp)
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(
-                    enabled = !updateBusy,
-                    onClick = {
-                        scope.launch {
-                            updateBusy = true
-                            updateMessage = "در حال دانلود و بررسی فایل..."
-                            try {
-                                val apk = UpdateManager.downloadUpdate(
-                                    context,
-                                    availableUpdate
-                                )
-                                val started = UpdateManager.startInstaller(context, apk)
-                                updateMessage = if (started) {
-                                    "نصب‌کننده اندروید باز شد."
-                                } else {
-                                    "مجوز نصب برنامه‌های ناشناس را برای آژند فعال کن و دوباره بروزرسانی را بزن."
-                                }
-                            } catch (_: Exception) {
-                                updateMessage =
-                                    "دانلود یا بررسی بروزرسانی ناموفق بود. دوباره تلاش کن."
-                            } finally {
-                                updateBusy = false
-                            }
-                        }
-                    }
-                ) {
-                    Text(if (updateBusy) "در حال دانلود..." else "دانلود و نصب")
-                }
-            },
-            dismissButton = {
-                if (!availableUpdate.mandatory) {
-                    TextButton(
-                        enabled = !updateBusy,
-                        onClick = { updateInfo = null }
-                    ) {
-                        Text("بعداً")
-                    }
-                }
-            },
-            containerColor = Surface,
-            titleContentColor = TextPrimary,
-            textContentColor = TextPrimary
-        )
+@Composable
+private fun LoadingScreen() {
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            CircularProgressIndicator(color = Gold)
+            Spacer(Modifier.height(12.dp))
+            Text("در حال دریافت اطلاعات واحد...", color = TextMuted)
+        }
+    }
+}
+
+@Composable
+private fun ErrorScreen(message: String, onRetry: () -> Unit) {
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Card(colors = CardDefaults.cardColors(containerColor = Surface), modifier = Modifier.padding(22.dp)) {
+            Column(Modifier.padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("دریافت اطلاعات ناموفق بود", color = Danger)
+                Spacer(Modifier.height(8.dp))
+                Text(message, color = TextMuted, fontSize = 12.sp)
+                Spacer(Modifier.height(16.dp))
+                Button(onClick = onRetry) { Text("تلاش مجدد") }
+            }
+        }
     }
 }
 
@@ -192,17 +396,9 @@ private fun ScreenContainer(
     content: @Composable ColumnScope.() -> Unit
 ) {
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 18.dp, vertical = 18.dp)
+        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 18.dp, vertical = 18.dp)
     ) {
-        Text(
-            text = title,
-            color = TextPrimary,
-            fontWeight = FontWeight.Bold,
-            fontSize = 25.sp
-        )
+        Text(title, color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 25.sp)
         if (subtitle != null) {
             Spacer(Modifier.height(6.dp))
             Text(subtitle, color = TextMuted, fontSize = 13.sp)
@@ -214,156 +410,274 @@ private fun ScreenContainer(
 }
 
 @Composable
-private fun DashboardScreen() = ScreenContainer(
+private fun HomeScreen(data: DashboardData?, onRefresh: () -> Unit) = ScreenContainer(
     title = "آژند",
-    subtitle = "مجتمع تجاری، مسکونی • نسخه ۰.۴.۸"
+    subtitle = "مجتمع تجاری، مسکونی • نسخه ۰.۵.۰"
 ) {
+    val profile = data?.profile
+    val unitText = when {
+        profile == null -> "واحد —"
+        profile.block.isBlank() -> "واحد ${profile.unitNumber}"
+        else -> "بلوک ${profile.block} • واحد ${profile.unitNumber}"
+    }
+
     Card(
         colors = CardDefaults.cardColors(containerColor = Surface),
         shape = RoundedCornerShape(24.dp),
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(Modifier.padding(20.dp)) {
-            Text("سلام 👋", color = TextMuted, fontSize = 13.sp)
+            Text("سلام ${profile?.fullName.orEmpty()} 👋", color = TextMuted, fontSize = 13.sp)
             Spacer(Modifier.height(4.dp))
-            Text("واحد ۳۰۵", color = TextPrimary, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+            Text(unitText, color = TextPrimary, fontSize = 22.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(18.dp))
             Text("مانده حساب", color = TextMuted, fontSize = 13.sp)
             Spacer(Modifier.height(4.dp))
+            val due = data?.totalDue ?: 0L
             Text(
-                "۳٬۰۰۰٬۰۰۰ تومان بدهکار",
-                color = Danger,
+                if (due > 0) "${money(due)} بدهکار" else "تسویه",
+                color = if (due > 0) Danger else Success,
                 fontSize = 20.sp,
                 fontWeight = FontWeight.Bold
             )
             Spacer(Modifier.height(16.dp))
-            Button(
-                onClick = { },
-                modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = Gold,
-                    contentColor = Navy
-                ),
-                shape = RoundedCornerShape(14.dp)
-            ) {
-                Text("پرداخت شارژ", fontWeight = FontWeight.Bold)
+            OutlinedButton(onClick = onRefresh, modifier = Modifier.fillMaxWidth()) {
+                Text("بروزرسانی اطلاعات")
             }
         }
     }
 
     Spacer(Modifier.height(14.dp))
-
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         MiniStat(
             modifier = Modifier.weight(1f),
-            title = "شارژ شهریور",
-            value = "۲٫۵ م",
+            title = data?.currentChargeTitle?.ifBlank { "آخرین شارژ" } ?: "آخرین شارژ",
+            value = shortMoney(data?.currentChargeAmount ?: 0L),
             hint = "تومان"
         )
         MiniStat(
             modifier = Modifier.weight(1f),
             title = "درخواست باز",
-            value = "۱",
+            value = (data?.openRequests ?: 0).toString(),
             hint = "مورد"
         )
     }
 
     Spacer(Modifier.height(18.dp))
-    SectionTitle("دسترسی سریع")
+    SectionTitle("آخرین اعلان")
+    val latest = data?.announcements?.firstOrNull()
+    if (latest == null) EmptyCard("هنوز اعلانی ثبت نشده است.")
+    else NoticeCard(latest.title, latest.body, latest.publishedAt)
+}
 
-    QuickAction("صورتحساب و ریز هزینه‌ها", "مشاهده جزئیات مالی واحد")
-    QuickAction("ثبت درخواست خدمات", "خرابی، نظافت، تأسیسات و سایر موارد")
-    QuickAction("اعلانات ساختمان", "آخرین اطلاعیه‌های مدیریت")
-    QuickAction("اطلاعات واحد", "مالک، ساکنین و اطلاعات تماس")
+@Composable
+private fun FinanceScreen(data: DashboardData?) = ScreenContainer(
+    title = "مالی",
+    subtitle = "شارژ و هزینه‌های واقعی ثبت‌شده برای واحد"
+) {
+    SectionTitle("صورتحساب واحد")
+    val charges = data?.charges.orEmpty()
+    if (charges.isEmpty()) {
+        EmptyCard("هنوز شارژی برای این واحد ثبت نشده است.")
+    } else {
+        charges.forEach { charge ->
+            val remaining = (charge.amount - charge.paidAmount).coerceAtLeast(0)
+            FinanceRow(
+                charge.title,
+                money(remaining),
+                if (remaining == 0L) "پرداخت شد" else "مانده",
+                if (remaining == 0L) Success else Danger
+            )
+        }
+    }
 
     Spacer(Modifier.height(18.dp))
-    SectionTitle("آخرین اعلان")
-
-    Card(
-        colors = CardDefaults.cardColors(containerColor = Surface2),
-        shape = RoundedCornerShape(18.dp),
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Column(Modifier.padding(17.dp)) {
-            Text("جلسه هیئت‌مدیره", color = Gold, fontWeight = FontWeight.Bold)
-            Spacer(Modifier.height(6.dp))
-            Text(
-                "پنجشنبه ساعت ۲۰ جلسه ماهانه مجتمع برگزار می‌شود.",
-                color = TextPrimary,
-                lineHeight = 22.sp
-            )
-            Spacer(Modifier.height(8.dp))
-            Text("امروز • مدیریت مجتمع", color = TextMuted, fontSize = 12.sp)
+    SectionTitle("هزینه‌های اخیر مجتمع")
+    val expenses = data?.expenses.orEmpty()
+    if (expenses.isEmpty()) EmptyCard("هزینه‌ای ثبت نشده است.")
+    else {
+        Card(
+            colors = CardDefaults.cardColors(containerColor = Surface),
+            shape = RoundedCornerShape(18.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
+                expenses.forEach { ExpenseRow(it.title, money(it.amount)) }
+            }
         }
     }
 }
 
 @Composable
-private fun FinanceScreen() = ScreenContainer(
-    title = "مالی",
-    subtitle = "شارژ، پرداخت‌ها و شفافیت هزینه‌های ساختمان"
+private fun ServicesScreen(
+    data: DashboardData?,
+    onCreateRequest: (String, String, String, (Boolean, String?) -> Unit) -> Unit
+) = ScreenContainer(
+    title = "خدمات",
+    subtitle = "ثبت و پیگیری درخواست‌های واحد"
 ) {
-    FinanceRow("شارژ شهریور", "۲٬۵۰۰٬۰۰۰ تومان", "پرداخت نشده", Danger)
-    FinanceRow("بدهی قبلی", "۵۰۰٬۰۰۰ تومان", "باز", Danger)
-    FinanceRow("پرداخت مرداد", "۲٬۳۰۰٬۰۰۰ تومان", "پرداخت شد", Success)
+    var showDialog by remember { mutableStateOf(false) }
+
+    Button(
+        onClick = { showDialog = true },
+        colors = ButtonDefaults.buttonColors(containerColor = Gold, contentColor = Navy),
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(14.dp)
+    ) {
+        Text("ثبت درخواست جدید", fontWeight = FontWeight.Bold)
+    }
 
     Spacer(Modifier.height(18.dp))
-    SectionTitle("هزینه‌های اخیر ساختمان")
-    ExpenseRow("برق مشاعات", "۸٬۴۰۰٬۰۰۰")
-    ExpenseRow("نظافت", "۱۲٬۰۰۰٬۰۰۰")
-    ExpenseRow("تعمیر آسانسور", "۶٬۸۰۰٬۰۰۰")
+    SectionTitle("درخواست‌های من")
+
+    val requests = data?.serviceRequests.orEmpty()
+    if (requests.isEmpty()) EmptyCard("هنوز درخواستی ثبت نکرده‌اید.")
+    else requests.forEach { request ->
+        Card(
+            colors = CardDefaults.cardColors(containerColor = Surface),
+            shape = RoundedCornerShape(17.dp),
+            modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp)
+        ) {
+            Column(Modifier.padding(16.dp)) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text(request.title, color = TextPrimary, fontWeight = FontWeight.Bold)
+                    Text(
+                        requestStatus(request.status),
+                        color = if (request.status in listOf("closed", "done")) Success else Gold,
+                        fontSize = 12.sp
+                    )
+                }
+                Spacer(Modifier.height(6.dp))
+                Text(request.category, color = TextMuted, fontSize = 12.sp)
+                if (request.description.isNotBlank()) {
+                    Spacer(Modifier.height(6.dp))
+                    Text(request.description, color = TextPrimary, fontSize = 13.sp)
+                }
+            }
+        }
+    }
+
+    if (showDialog) {
+        CreateRequestDialog(
+            onDismiss = { showDialog = false },
+            onSubmit = { category, title, description, done ->
+                onCreateRequest(category, title, description) { ok, err ->
+                    if (ok) showDialog = false
+                    done(ok, err)
+                }
+            }
+        )
+    }
 }
 
 @Composable
-private fun ServicesScreen() = ScreenContainer(
-    title = "خدمات",
-    subtitle = "درخواست‌های واحد و خدمات مشترک"
+private fun CreateRequestDialog(
+    onDismiss: () -> Unit,
+    onSubmit: (String, String, String, (Boolean, String?) -> Unit) -> Unit
 ) {
-    QuickAction("ثبت درخواست جدید", "یک مشکل یا درخواست خدماتی ثبت کنید")
-    QuickAction("درخواست‌های من", "پیگیری وضعیت درخواست‌های قبلی")
-    QuickAction("رزرو امکانات", "این بخش در نسخه بعد فعال می‌شود")
-    QuickAction("پارکینگ مهمان", "این بخش در نسخه بعد فعال می‌شود")
+    var category by remember { mutableStateOf("تأسیسات") }
+    var title by remember { mutableStateOf("") }
+    var description by remember { mutableStateOf("") }
+    var busy by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+
+    AlertDialog(
+        onDismissRequest = { if (!busy) onDismiss() },
+        title = { Text("درخواست خدمات") },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = category,
+                    onValueChange = { category = it.take(40) },
+                    label = { Text("دسته‌بندی") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(Modifier.height(10.dp))
+                OutlinedTextField(
+                    value = title,
+                    onValueChange = { title = it.take(80) },
+                    label = { Text("عنوان") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(Modifier.height(10.dp))
+                OutlinedTextField(
+                    value = description,
+                    onValueChange = { description = it.take(500) },
+                    label = { Text("توضیحات") },
+                    minLines = 3,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                if (error != null) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(error!!, color = Danger, fontSize = 12.sp)
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                enabled = !busy && category.isNotBlank() && title.isNotBlank(),
+                onClick = {
+                    busy = true
+                    error = null
+                    onSubmit(category.trim(), title.trim(), description.trim()) { ok, message ->
+                        busy = false
+                        if (!ok) error = message ?: "ثبت درخواست ناموفق بود."
+                    }
+                }
+            ) {
+                Text(if (busy) "در حال ثبت..." else "ثبت")
+            }
+        },
+        dismissButton = {
+            TextButton(enabled = !busy, onClick = onDismiss) { Text("انصراف") }
+        },
+        containerColor = Surface
+    )
 }
 
 @Composable
-private fun NoticesScreen() = ScreenContainer(
+private fun NoticesScreen(data: DashboardData?) = ScreenContainer(
     title = "اعلانات",
     subtitle = "اطلاعیه‌های رسمی مجتمع آژند"
 ) {
-    NoticeCard("جلسه هیئت‌مدیره", "پنجشنبه ساعت ۲۰ جلسه ماهانه برگزار می‌شود.", "امروز")
-    NoticeCard("سرویس آسانسور", "آسانسور بلوک A فردا بین ساعت ۱۰ تا ۱۲ سرویس می‌شود.", "دیروز")
-    NoticeCard("یادآوری شارژ", "مهلت پرداخت شارژ شهریور تا پایان هفته است.", "۳ روز پیش")
+    val announcements = data?.announcements.orEmpty()
+    if (announcements.isEmpty()) EmptyCard("هنوز اعلانی منتشر نشده است.")
+    else announcements.forEach { notice ->
+        NoticeCard(notice.title, notice.body, notice.publishedAt)
+        Spacer(Modifier.height(10.dp))
+    }
 }
 
 @Composable
-private fun AccountScreen() = ScreenContainer(
+private fun AccountScreen(data: DashboardData?, onLogout: () -> Unit) = ScreenContainer(
     title = "حساب من",
     subtitle = "پروفایل و اطلاعات واحد"
 ) {
+    val p = data?.profile
     Card(
         colors = CardDefaults.cardColors(containerColor = Surface),
         shape = RoundedCornerShape(20.dp),
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(Modifier.padding(18.dp)) {
-            ProfileLine("نام", "کاربر آژند")
-            ProfileLine("واحد", "۳۰۵")
-            ProfileLine("نوع عضویت", "مالک")
-            ProfileLine("نسخه اپ", "۰.۴.۸")
+            ProfileLine("نام", p?.fullName ?: "—")
+            ProfileLine("شماره موبایل", p?.mobile ?: "—")
+            ProfileLine("واحد", p?.unitNumber ?: "—")
+            ProfileLine("بلوک", p?.block?.ifBlank { "—" } ?: "—")
+            ProfileLine("نوع عضویت", relationLabel(p?.relation.orEmpty()))
+            ProfileLine("نسخه اپ", "۰.۵.۰")
         }
+    }
+    Spacer(Modifier.height(16.dp))
+    OutlinedButton(onClick = onLogout, modifier = Modifier.fillMaxWidth()) {
+        Text("خروج از حساب")
     }
 }
 
 @Composable
-private fun MiniStat(
-    modifier: Modifier,
-    title: String,
-    value: String,
-    hint: String
-) {
+private fun MiniStat(modifier: Modifier, title: String, value: String, hint: String) {
     Card(
         modifier = modifier,
         colors = CardDefaults.cardColors(containerColor = Surface2),
@@ -372,44 +686,25 @@ private fun MiniStat(
         Column(Modifier.padding(16.dp)) {
             Text(title, color = TextMuted, fontSize = 12.sp)
             Spacer(Modifier.height(8.dp))
-            Text(value, color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+            Text(value, color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 19.sp)
             Text(hint, color = TextMuted, fontSize = 11.sp)
         }
     }
 }
 
-@Composable
-private fun SectionTitle(title: String) {
+@Composable private fun SectionTitle(title: String) {
     Text(title, color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 16.sp)
     Spacer(Modifier.height(10.dp))
 }
 
 @Composable
-private fun QuickAction(title: String, subtitle: String) {
+private fun EmptyCard(message: String) {
     Card(
         colors = CardDefaults.cardColors(containerColor = Surface),
         shape = RoundedCornerShape(17.dp),
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(bottom = 10.dp)
+        modifier = Modifier.fillMaxWidth()
     ) {
-        Row(
-            modifier = Modifier.padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(9.dp)
-                    .background(Gold, RoundedCornerShape(99.dp))
-            )
-            Spacer(Modifier.width(12.dp))
-            Column(Modifier.weight(1f)) {
-                Text(title, color = TextPrimary, fontWeight = FontWeight.SemiBold)
-                Spacer(Modifier.height(3.dp))
-                Text(subtitle, color = TextMuted, fontSize = 12.sp)
-            }
-            Text("‹", color = Gold, fontSize = 24.sp)
-        }
+        Text(message, color = TextMuted, modifier = Modifier.padding(16.dp), fontSize = 13.sp)
     }
 }
 
@@ -418,9 +713,7 @@ private fun FinanceRow(title: String, amount: String, status: String, statusColo
     Card(
         colors = CardDefaults.cardColors(containerColor = Surface),
         shape = RoundedCornerShape(17.dp),
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(bottom = 10.dp)
+        modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp)
     ) {
         Column(Modifier.padding(16.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -436,13 +729,11 @@ private fun FinanceRow(title: String, amount: String, status: String, statusColo
 @Composable
 private fun ExpenseRow(title: String, amount: String) {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 10.dp),
+        modifier = Modifier.fillMaxWidth().padding(vertical = 11.dp),
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
         Text(title, color = TextPrimary)
-        Text("$amount تومان", color = TextMuted)
+        Text(amount, color = TextMuted)
     }
     HorizontalDivider(color = Color(0xFF20354F))
 }
@@ -450,18 +741,18 @@ private fun ExpenseRow(title: String, amount: String) {
 @Composable
 private fun NoticeCard(title: String, body: String, time: String) {
     Card(
-        colors = CardDefaults.cardColors(containerColor = Surface),
+        colors = CardDefaults.cardColors(containerColor = Surface2),
         shape = RoundedCornerShape(17.dp),
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(bottom = 10.dp)
+        modifier = Modifier.fillMaxWidth()
     ) {
         Column(Modifier.padding(16.dp)) {
             Text(title, color = Gold, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(7.dp))
             Text(body, color = TextPrimary, lineHeight = 21.sp)
-            Spacer(Modifier.height(9.dp))
-            Text(time, color = TextMuted, fontSize = 11.sp)
+            if (time.isNotBlank()) {
+                Spacer(Modifier.height(9.dp))
+                Text(time, color = TextMuted, fontSize = 11.sp)
+            }
         }
     }
 }
@@ -469,12 +760,35 @@ private fun NoticeCard(title: String, body: String, time: String) {
 @Composable
 private fun ProfileLine(label: String, value: String) {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 11.dp),
+        modifier = Modifier.fillMaxWidth().padding(vertical = 11.dp),
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
         Text(label, color = TextMuted)
         Text(value, color = TextPrimary, fontWeight = FontWeight.Medium)
     }
+}
+
+private fun money(value: Long): String =
+    "${NumberFormat.getNumberInstance(Locale("fa", "IR")).format(value)} تومان"
+
+private fun shortMoney(value: Long): String = when {
+    value >= 1_000_000 -> String.format(Locale("fa", "IR"), "%.1f م", value.toDouble() / 1_000_000.0)
+    value > 0 -> NumberFormat.getNumberInstance(Locale("fa", "IR")).format(value)
+    else -> "۰"
+}
+
+private fun relationLabel(value: String): String = when (value) {
+    "owner" -> "مالک"
+    "tenant" -> "مستأجر"
+    "resident" -> "ساکن"
+    "manager" -> "مدیر"
+    else -> value.ifBlank { "—" }
+}
+
+private fun requestStatus(value: String): String = when (value) {
+    "new" -> "جدید"
+    "in_progress" -> "در حال انجام"
+    "done" -> "انجام شد"
+    "closed" -> "بسته"
+    else -> value
 }
