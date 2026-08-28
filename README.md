@@ -1,4 +1,4 @@
-# Azhand v0.4.4
+# Azhand v0.4.5
 
 پایه‌ی یکپارچه اپلیکیشن مدیریت مجتمع آژند.
 
@@ -7,7 +7,7 @@
 - Kotlin
 - Jetpack Compose
 - Package: `com.azhand.app`
-- Version: `0.4.4`
+- Version: `0.4.5`
 - Debug APK از GitHub Actions ساخته می‌شود.
 - Release فقط وقتی Keystore ثابت در GitHub Secrets ثبت شده باشد ساخته می‌شود.
 
@@ -57,23 +57,23 @@ Schema اپ هنگام اولین درخواست API به صورت idempotent ا
 
 این ZIP را با Caption زیر برای ربات بفرست:
 
-`v0.4.4`
+`v0.4.5`
 
 بعد از موفقیت:
 
 1. GitHub main باید فایل‌های پروژه را داشته باشد.
 2. GitHub Actions باید Android debug APK را Build کند.
-3. Worker باید به 0.4.4 آپدیت شود.
+3. Worker باید به 0.4.5 آپدیت شود.
 4. مسیر `/app` باید PWA آژند را نشان دهد.
 5. مسیر `/api/app/health` باید `ok: true` برگرداند.
 
 
-## Fix v0.4.4 — GitHub workflow permission
+## Fix v0.4.5 — GitHub workflow permission
 
 v0.4.0 reached the local commit stage, but GitHub rejected the push because
 the release tried to create `.github/workflows/android-build.yml`.
 
-v0.4.4 fixes that by:
+v0.4.5 fixes that by:
 
 - excluding `.github/workflows/**` from ZIP synchronization;
 - removing the separate `android-build.yml` from the release package;
@@ -82,13 +82,13 @@ v0.4.4 fixes that by:
 - building the Android debug APK inside `azhand-release.yml`;
 - uploading the APK as a GitHub Actions artifact.
 
-After v0.4.4 deploys, open `/setup` and save once to update the GitHub release
-workflow. Then send v0.4.4 again to test the integrated Android build.
+After v0.4.5 deploys, open `/setup` and save once to update the GitHub release
+workflow. Then send v0.4.5 again to test the integrated Android build.
 
 
-## v0.4.4 — Self-healing release/build pipeline
+## v0.4.5 — Self-healing release/build pipeline
 
-From v0.4.4 onward, before every normal ZIP release the Telegram Worker uses
+From v0.4.5 onward, before every normal ZIP release the Telegram Worker uses
 its saved GitHub fine-grained PAT to create/update the single stable release
 workflow. Normal ZIPs never modify `.github/workflows/*`.
 
@@ -97,18 +97,18 @@ changes can be shipped inside the ZIP without changing GitHub workflow files.
 
 ### One-time bridge from the currently deployed v0.4.1 Worker
 
-The currently active v0.4.1 code cannot use features that only exist in v0.4.4
-before v0.4.4 has been deployed.
+The currently active v0.4.1 code cannot use features that only exist in v0.4.5
+before v0.4.5 has been deployed.
 
-1. Send `Azhand-v0.4.4.zip` once.
+1. Send `Azhand-v0.4.5.zip` once.
 2. After the bot reports that the Worker updated, send `/build`.
 
-`/build` reuses the same v0.4.4 ZIP already stored in KV, updates the GitHub
+`/build` reuses the same v0.4.5 ZIP already stored in KV, updates the GitHub
 workflow automatically, and starts Android build. After that, every later ZIP
 builds Android automatically on its first upload, with no `/setup` step.
 
 
-## v0.4.4 — D1-independent build recovery
+## v0.4.5 — D1-independent build recovery
 
 Fixes:
 
@@ -126,14 +126,14 @@ Changes:
 
 For the currently deployed v0.4.2 bridge:
 
-1. Send `Azhand-v0.4.4.zip`.
+1. Send `Azhand-v0.4.5.zip`.
 2. Wait for Worker auto-deploy.
 3. Send `/build`.
 
-After v0.4.4 is active, normal future ZIP uploads auto-build on the first try.
+After v0.4.5 is active, normal future ZIP uploads auto-build on the first try.
 
 
-## v0.4.4 — lossless workflow embedding
+## v0.4.5 — lossless workflow embedding
 
 Fixes the GitHub Actions failure:
 
@@ -144,7 +144,7 @@ the Cloudflare Worker stored the GitHub workflow inside a JavaScript template
 literal. Bash and Python backslashes were modified while JavaScript evaluated
 that string.
 
-v0.4.4 stores the complete workflow as Base64 and decodes it at runtime.
+v0.4.5 stores the complete workflow as Base64 and decodes it at runtime.
 The workflow GitHub receives is therefore byte-for-byte the workflow tested
 during packaging.
 
@@ -158,7 +158,26 @@ Additional validation before packaging:
 
 ### One-time recovery
 
-The currently deployed pre-v0.4.4 Worker will keep writing the broken workflow
-before every dispatch. Therefore deploy `worker.js` from v0.4.4 to Cloudflare
-once. After that, send `Azhand-v0.4.4.zip` normally. Future workflow updates
+The currently deployed pre-v0.4.5 Worker will keep writing the broken workflow
+before every dispatch. Therefore deploy `worker.js` from v0.4.5 to Cloudflare
+once. After that, send `Azhand-v0.4.5.zip` normally. Future workflow updates
 are automatic again.
+
+
+## v0.4.5 — Android JVM target fix
+
+Fixes GitHub Actions failure:
+
+`Inconsistent JVM-target compatibility detected for tasks
+'compileDebugJavaWithJavac' (1.8) and 'compileDebugKotlin' (17).`
+
+Changes:
+
+- Java sourceCompatibility = 17
+- Java targetCompatibility = 17
+- Kotlin JVM toolchain = 17
+- Android versionCode = 9
+- Android versionName = 0.4.5
+
+The GitHub runner already uses Temurin Java 17, so Java and Kotlin now target
+the same JVM level.

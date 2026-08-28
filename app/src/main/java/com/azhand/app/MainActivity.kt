@@ -135,7 +135,7 @@ private fun ScreenContainer(
 @Composable
 private fun DashboardScreen() = ScreenContainer(
     title = "آژند",
-    subtitle = "مجتمع تجاری، مسکونی • نسخه ۰.۴.۴"
+    subtitle = "مجتمع تجاری، مسکونی • نسخه ۰.۴.۵"
 ) {
     Card(
         colors = CardDefaults.cardColors(containerColor = Surface),
@@ -271,7 +271,7 @@ private fun AccountScreen() = ScreenContainer(
             ProfileLine("نام", "کاربر آژند")
             ProfileLine("واحد", "۳۰۵")
             ProfileLine("نوع عضویت", "مالک")
-            ProfileLine("نسخه اپ", "۰.۴.۴")
+            ProfileLine("نسخه اپ", "۰.۴.۵")
         }
     }
 }
