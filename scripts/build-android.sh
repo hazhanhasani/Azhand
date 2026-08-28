@@ -3,6 +3,9 @@ set -euo pipefail
 
 echo "== Azhand Android build =="
 
+echo "Validating embedded Manager/PWA JavaScript..."
+python3 scripts/validate-web-assets.py
+
 if [ ! -f "settings.gradle.kts" ] || [ ! -d "app" ]; then
   echo "Android project not found."
   exit 1
