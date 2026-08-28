@@ -187,6 +187,36 @@ private fun AzhandRoot() {
                 updateStatus = updateStatus,
                 updateChecking = updateChecking,
                 onCheckUpdate = { requestUpdateCheck(force = true) },
+                onSubmitPayment = {
+                    chargeId,
+                    amount,
+                    referenceId,
+                    note,
+                    done ->
+                    val current = token
+                    if (current == null) {
+                        done(false, "نشست کاربری معتبر نیست.")
+                    } else {
+                        scope.launch {
+                            try {
+                                ApiClient.submitPayment(
+                                    current,
+                                    chargeId,
+                                    amount,
+                                    referenceId,
+                                    note
+                                )
+                                refreshKey++
+                                done(true, null)
+                            } catch (e: Exception) {
+                                done(
+                                    false,
+                                    e.message ?: "ثبت پرداخت ناموفق بود."
+                                )
+                            }
+                        }
+                    }
+                },
                 onCreateRequest = { category, title, description, done ->
                     val current = token
                     if (current == null) {
@@ -366,7 +396,7 @@ private fun LoginScreen(onLoggedIn: (String) -> Unit) {
             }
         }
         Spacer(Modifier.height(18.dp))
-        Text("نسخه ۰.۵.۱", color = TextMuted, fontSize = 11.sp)
+        Text("نسخه ۰.۶.۰", color = TextMuted, fontSize = 11.sp)
     }
 }
 
@@ -379,6 +409,13 @@ private fun ResidentApp(
     updateStatus: String,
     updateChecking: Boolean,
     onCheckUpdate: () -> Unit,
+    onSubmitPayment: (
+        Long,
+        Long,
+        String,
+        String,
+        (Boolean, String?) -> Unit
+    ) -> Unit,
     onCreateRequest: (String, String, String, (Boolean, String?) -> Unit) -> Unit,
     onLogout: () -> Unit
 ) {
@@ -412,7 +449,7 @@ private fun ResidentApp(
                 error != null && dashboard == null -> ErrorScreen(error, onRefresh)
                 else -> when (selected) {
                     AppTab.HOME -> HomeScreen(dashboard, onRefresh)
-                    AppTab.FINANCE -> FinanceScreen(dashboard)
+                    AppTab.FINANCE -> FinanceScreen(dashboard, onSubmitPayment)
                     AppTab.SERVICES -> ServicesScreen(dashboard, onCreateRequest)
                     AppTab.NOTICES -> NoticesScreen(dashboard)
                     AppTab.ACCOUNT -> AccountScreen(
@@ -477,7 +514,7 @@ private fun ScreenContainer(
 @Composable
 private fun HomeScreen(data: DashboardData?, onRefresh: () -> Unit) = ScreenContainer(
     title = "آژند",
-    subtitle = "مجتمع تجاری، مسکونی • نسخه ۰.۵.۱"
+    subtitle = "مجتمع تجاری، مسکونی • نسخه ۰.۶.۰"
 ) {
     val profile = data?.profile
     val unitText = when {
@@ -536,38 +573,335 @@ private fun HomeScreen(data: DashboardData?, onRefresh: () -> Unit) = ScreenCont
 }
 
 @Composable
-private fun FinanceScreen(data: DashboardData?) = ScreenContainer(
+private fun FinanceScreen(
+    data: DashboardData?,
+    onSubmitPayment: (
+        Long,
+        Long,
+        String,
+        String,
+        (Boolean, String?) -> Unit
+    ) -> Unit
+) = ScreenContainer(
     title = "مالی",
-    subtitle = "شارژ و هزینه‌های واقعی ثبت‌شده برای واحد"
+    subtitle = "شارژ، پرداخت‌ها و هزینه‌های واقعی واحد"
 ) {
+    var paymentCharge by remember { mutableStateOf<ChargeData?>(null) }
+
     SectionTitle("صورتحساب واحد")
     val charges = data?.charges.orEmpty()
+
     if (charges.isEmpty()) {
         EmptyCard("هنوز شارژی برای این واحد ثبت نشده است.")
     } else {
         charges.forEach { charge ->
-            val remaining = (charge.amount - charge.paidAmount).coerceAtLeast(0)
-            FinanceRow(
-                charge.title,
-                money(remaining),
-                if (remaining == 0L) "پرداخت شد" else "مانده",
-                if (remaining == 0L) Success else Danger
-            )
+            val remaining =
+                (charge.amount - charge.paidAmount).coerceAtLeast(0)
+
+            Card(
+                colors = CardDefaults.cardColors(containerColor = Surface),
+                shape = RoundedCornerShape(17.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 10.dp)
+            ) {
+                Column(Modifier.padding(16.dp)) {
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            charge.title,
+                            color = TextPrimary,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Text(
+                            if (remaining == 0L) "پرداخت شد" else "مانده",
+                            color = if (remaining == 0L) Success else Danger,
+                            fontSize = 12.sp
+                        )
+                    }
+
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        money(remaining),
+                        color = TextMuted
+                    )
+
+                    if (remaining > 0L) {
+                        Spacer(Modifier.height(12.dp))
+                        Button(
+                            onClick = { paymentCharge = charge },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Gold,
+                                contentColor = Navy
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("ثبت واریز برای این شارژ")
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Spacer(Modifier.height(18.dp))
+    SectionTitle("واریزهای ثبت‌شده")
+
+    val submissions = data?.paymentSubmissions.orEmpty()
+    if (submissions.isEmpty()) {
+        EmptyCard("هنوز واریزی برای بررسی مدیریت ثبت نشده است.")
+    } else {
+        submissions.forEach { payment ->
+            PaymentSubmissionCard(payment)
+            Spacer(Modifier.height(9.dp))
         }
     }
 
     Spacer(Modifier.height(18.dp))
     SectionTitle("هزینه‌های اخیر مجتمع")
+
     val expenses = data?.expenses.orEmpty()
-    if (expenses.isEmpty()) EmptyCard("هزینه‌ای ثبت نشده است.")
-    else {
+    if (expenses.isEmpty()) {
+        EmptyCard("هزینه‌ای ثبت نشده است.")
+    } else {
         Card(
             colors = CardDefaults.cardColors(containerColor = Surface),
             shape = RoundedCornerShape(18.dp),
             modifier = Modifier.fillMaxWidth()
         ) {
             Column(Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
-                expenses.forEach { ExpenseRow(it.title, money(it.amount)) }
+                expenses.forEach {
+                    ExpenseRow(it.title, money(it.amount))
+                }
+            }
+        }
+    }
+
+    val selectedCharge = paymentCharge
+    if (selectedCharge != null) {
+        PaymentSubmissionDialog(
+            charge = selectedCharge,
+            onDismiss = { paymentCharge = null },
+            onSubmit = { amount, referenceId, note, done ->
+                onSubmitPayment(
+                    selectedCharge.id,
+                    amount,
+                    referenceId,
+                    note
+                ) { ok, error ->
+                    if (ok) paymentCharge = null
+                    done(ok, error)
+                }
+            }
+        )
+    }
+}
+
+@Composable
+private fun PaymentSubmissionDialog(
+    charge: ChargeData,
+    onDismiss: () -> Unit,
+    onSubmit: (
+        Long,
+        String,
+        String,
+        (Boolean, String?) -> Unit
+    ) -> Unit
+) {
+    val remaining =
+        (charge.amount - charge.paidAmount).coerceAtLeast(0)
+
+    var amount by remember {
+        mutableStateOf(remaining.toString())
+    }
+    var referenceId by remember { mutableStateOf("") }
+    var note by remember { mutableStateOf("") }
+    var busy by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+
+    AlertDialog(
+        onDismissRequest = {
+            if (!busy) onDismiss()
+        },
+        title = {
+            Text("ثبت واریز")
+        },
+        text = {
+            Column {
+                Text(
+                    charge.title,
+                    color = Gold,
+                    fontWeight = FontWeight.Bold
+                )
+
+                Spacer(Modifier.height(5.dp))
+
+                Text(
+                    "مانده: ${money(remaining)}",
+                    color = TextMuted,
+                    fontSize = 12.sp
+                )
+
+                Spacer(Modifier.height(12.dp))
+
+                OutlinedTextField(
+                    value = amount,
+                    onValueChange = {
+                        amount = it.filter { ch ->
+                            ch in '0'..'9'
+                        }.take(12)
+                    },
+                    label = { Text("مبلغ واریزی (تومان)") },
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Number
+                    ),
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(Modifier.height(10.dp))
+
+                OutlinedTextField(
+                    value = referenceId,
+                    onValueChange = {
+                        referenceId = it.take(80)
+                    },
+                    label = {
+                        Text("شماره پیگیری / مرجع")
+                    },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(Modifier.height(10.dp))
+
+                OutlinedTextField(
+                    value = note,
+                    onValueChange = { note = it.take(300) },
+                    label = { Text("توضیح اختیاری") },
+                    minLines = 2,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                if (error != null) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        error!!,
+                        color = Danger,
+                        fontSize = 12.sp
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                enabled =
+                    !busy &&
+                    amount.toLongOrNull()?.let {
+                        it > 0 && it <= remaining
+                    } == true &&
+                    referenceId.isNotBlank(),
+                onClick = {
+                    val value = amount.toLongOrNull()
+                    if (value == null) {
+                        error = "مبلغ نامعتبر است."
+                        return@TextButton
+                    }
+
+                    busy = true
+                    error = null
+
+                    onSubmit(
+                        value,
+                        referenceId.trim(),
+                        note.trim()
+                    ) { ok, message ->
+                        busy = false
+                        if (!ok) {
+                            error =
+                                message ?: "ثبت واریز ناموفق بود."
+                        }
+                    }
+                }
+            ) {
+                Text(
+                    if (busy) "در حال ثبت..."
+                    else "ارسال برای تأیید"
+                )
+            }
+        },
+        dismissButton = {
+            TextButton(
+                enabled = !busy,
+                onClick = onDismiss
+            ) {
+                Text("انصراف")
+            }
+        },
+        containerColor = Surface
+    )
+}
+
+@Composable
+private fun PaymentSubmissionCard(
+    payment: PaymentSubmissionData
+) {
+    val statusLabel = when (payment.status) {
+        "approved" -> "تأیید شد"
+        "rejected" -> "رد شد"
+        else -> "در انتظار بررسی"
+    }
+
+    val statusColor = when (payment.status) {
+        "approved" -> Success
+        "rejected" -> Danger
+        else -> Gold
+    }
+
+    Card(
+        colors = CardDefaults.cardColors(containerColor = Surface2),
+        shape = RoundedCornerShape(17.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(Modifier.padding(16.dp)) {
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    payment.chargeTitle,
+                    color = TextPrimary,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    statusLabel,
+                    color = statusColor,
+                    fontSize = 12.sp
+                )
+            }
+
+            Spacer(Modifier.height(8.dp))
+            Text(
+                money(payment.amount),
+                color = TextMuted
+            )
+
+            Spacer(Modifier.height(5.dp))
+            Text(
+                "پیگیری: ${payment.referenceId}",
+                color = TextMuted,
+                fontSize = 12.sp
+            )
+
+            if (payment.reviewerNote.isNotBlank()) {
+                Spacer(Modifier.height(7.dp))
+                Text(
+                    "یادداشت مدیریت: ${payment.reviewerNote}",
+                    color = TextPrimary,
+                    fontSize = 12.sp
+                )
             }
         }
     }

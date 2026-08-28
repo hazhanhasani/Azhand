@@ -52,6 +52,18 @@ data class ExpenseData(
     val expenseDate: String
 )
 
+data class PaymentSubmissionData(
+    val id: Long,
+    val chargeId: Long,
+    val chargeTitle: String,
+    val amount: Long,
+    val referenceId: String,
+    val note: String,
+    val status: String,
+    val reviewerNote: String,
+    val createdAt: String
+)
+
 data class DashboardData(
     val profile: ProfileData,
     val totalDue: Long,
@@ -61,7 +73,8 @@ data class DashboardData(
     val charges: List<ChargeData>,
     val announcements: List<AnnouncementData>,
     val serviceRequests: List<ServiceRequestData>,
-    val expenses: List<ExpenseData>
+    val expenses: List<ExpenseData>,
+    val paymentSubmissions: List<PaymentSubmissionData>
 )
 
 class ApiException(val statusCode: Int, message: String) : Exception(message)
@@ -111,7 +124,10 @@ object ApiClient {
                 charges = parseCharges(json.optJSONArray("charges")),
                 announcements = parseAnnouncements(json.optJSONArray("announcements")),
                 serviceRequests = parseRequests(json.optJSONArray("service_requests")),
-                expenses = parseExpenses(json.optJSONArray("expenses"))
+                expenses = parseExpenses(json.optJSONArray("expenses")),
+                paymentSubmissions = parsePaymentSubmissions(
+                    json.optJSONArray("payment_submissions")
+                )
             )
         }
 
@@ -129,6 +145,25 @@ object ApiClient {
                 .put("category", category)
                 .put("title", title)
                 .put("description", description)
+        )
+    }
+
+    suspend fun submitPayment(
+        token: String,
+        chargeId: Long,
+        amount: Long,
+        referenceId: String,
+        note: String
+    ) = withContext(Dispatchers.IO) {
+        requestJson(
+            method = "POST",
+            path = "/api/app/payment-submissions",
+            token = token,
+            body = JSONObject()
+                .put("charge_id", chargeId)
+                .put("amount", amount)
+                .put("reference_id", referenceId)
+                .put("note", note)
         )
     }
 
@@ -257,6 +292,30 @@ object ApiClient {
                         category = j.optString("category"),
                         amount = j.optLong("amount"),
                         expenseDate = j.optString("expense_date")
+                    )
+                )
+            }
+        }
+    }
+
+    private fun parsePaymentSubmissions(
+        array: JSONArray?
+    ): List<PaymentSubmissionData> {
+        if (array == null) return emptyList()
+        return buildList {
+            for (i in 0 until array.length()) {
+                val j = array.getJSONObject(i)
+                add(
+                    PaymentSubmissionData(
+                        id = j.optLong("id"),
+                        chargeId = j.optLong("charge_id"),
+                        chargeTitle = j.optString("charge_title"),
+                        amount = j.optLong("amount"),
+                        referenceId = j.optString("reference_id"),
+                        note = j.optString("note"),
+                        status = j.optString("status"),
+                        reviewerNote = j.optString("reviewer_note"),
+                        createdAt = j.optString("created_at")
                     )
                 )
             }
