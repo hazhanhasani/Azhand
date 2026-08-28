@@ -12,13 +12,13 @@ android {
         applicationId = "com.azhand.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 9
-        versionName = "0.4.5"
+        versionCode = 11
+        versionName = "0.4.7"
 
         buildConfigField(
             "String",
             "API_BASE_URL",
-            "\"${System.getenv("AZHAND_API_BASE_URL") ?: "https://example.workers.dev"}\""
+            "\"${System.getenv("AZHAND_API_BASE_URL") ?: "https://azhand.hazhanhasani4268-0f9.workers.dev"}\""
         )
     }
 
@@ -82,5 +82,6 @@ dependencies {
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
     debugImplementation("androidx.compose.ui:ui-tooling")
 }

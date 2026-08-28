@@ -18,6 +18,8 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.platform.LocalContext
+import kotlinx.coroutines.launch
 
 private val Navy = Color(0xFF07111F)
 private val Surface = Color(0xFF0E1B2D)
@@ -60,7 +62,16 @@ private enum class AppTab(val label: String, val emoji: String) {
 
 @Composable
 private fun AzhandApp() {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     var selected by remember { mutableStateOf(AppTab.HOME) }
+    var updateInfo by remember { mutableStateOf<AppUpdateInfo?>(null) }
+    var updateBusy by remember { mutableStateOf(false) }
+    var updateMessage by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(Unit) {
+        updateInfo = runCatching { UpdateManager.checkForUpdate() }.getOrNull()
+    }
 
     Scaffold(
         containerColor = Navy,
@@ -102,6 +113,76 @@ private fun AzhandApp() {
             }
         }
     }
+
+    val availableUpdate = updateInfo
+    if (availableUpdate != null) {
+        AlertDialog(
+            onDismissRequest = {
+                if (!updateBusy && !availableUpdate.mandatory) {
+                    updateInfo = null
+                }
+            },
+            title = { Text("نسخه جدید آژند آماده است") },
+            text = {
+                Column {
+                    Text("نسخه ${availableUpdate.versionName} آماده دانلود و نصب است.")
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        availableUpdate.notes,
+                        color = TextMuted,
+                        fontSize = 13.sp
+                    )
+                    if (updateMessage != null) {
+                        Spacer(Modifier.height(10.dp))
+                        Text(updateMessage!!, color = Gold, fontSize = 12.sp)
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = !updateBusy,
+                    onClick = {
+                        scope.launch {
+                            updateBusy = true
+                            updateMessage = "در حال دانلود و بررسی فایل..."
+                            try {
+                                val apk = UpdateManager.downloadUpdate(
+                                    context,
+                                    availableUpdate
+                                )
+                                val started = UpdateManager.startInstaller(context, apk)
+                                updateMessage = if (started) {
+                                    "نصب‌کننده اندروید باز شد."
+                                } else {
+                                    "مجوز نصب برنامه‌های ناشناس را برای آژند فعال کن و دوباره بروزرسانی را بزن."
+                                }
+                            } catch (_: Exception) {
+                                updateMessage =
+                                    "دانلود یا بررسی بروزرسانی ناموفق بود. دوباره تلاش کن."
+                            } finally {
+                                updateBusy = false
+                            }
+                        }
+                    }
+                ) {
+                    Text(if (updateBusy) "در حال دانلود..." else "دانلود و نصب")
+                }
+            },
+            dismissButton = {
+                if (!availableUpdate.mandatory) {
+                    TextButton(
+                        enabled = !updateBusy,
+                        onClick = { updateInfo = null }
+                    ) {
+                        Text("بعداً")
+                    }
+                }
+            },
+            containerColor = Surface,
+            titleContentColor = TextPrimary,
+            textContentColor = TextPrimary
+        )
+    }
 }
 
 @Composable
@@ -135,7 +216,7 @@ private fun ScreenContainer(
 @Composable
 private fun DashboardScreen() = ScreenContainer(
     title = "آژند",
-    subtitle = "مجتمع تجاری، مسکونی • نسخه ۰.۴.۵"
+    subtitle = "مجتمع تجاری، مسکونی • نسخه ۰.۴.۷"
 ) {
     Card(
         colors = CardDefaults.cardColors(containerColor = Surface),
@@ -271,7 +352,7 @@ private fun AccountScreen() = ScreenContainer(
             ProfileLine("نام", "کاربر آژند")
             ProfileLine("واحد", "۳۰۵")
             ProfileLine("نوع عضویت", "مالک")
-            ProfileLine("نسخه اپ", "۰.۴.۵")
+            ProfileLine("نسخه اپ", "۰.۴.۷")
         }
     }
 }

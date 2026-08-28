@@ -15,7 +15,19 @@ if command -v sdkmanager >/dev/null 2>&1; then
     "build-tools;35.0.0" >/dev/null || true
 fi
 
+echo "Building debug APK..."
 gradle :app:assembleDebug --stacktrace
 
-echo "Debug APK:"
+if [ -n "${ANDROID_KEYSTORE_PATH:-}" ] &&
+   [ -n "${ANDROID_KEYSTORE_PASSWORD:-}" ] &&
+   [ -n "${ANDROID_KEY_ALIAS:-}" ] &&
+   [ -n "${ANDROID_KEY_PASSWORD:-}" ] &&
+   [ -f "app/${ANDROID_KEYSTORE_PATH}" ]; then
+  echo "Stable signing key found; building signed release APK..."
+  gradle :app:assembleRelease --stacktrace
+else
+  echo "Stable signing secrets are not configured; signed release skipped."
+fi
+
+echo "Built APK files:"
 find app/build/outputs/apk -type f -name "*.apk" -print
