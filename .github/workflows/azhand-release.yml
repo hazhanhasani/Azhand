@@ -49,7 +49,10 @@ jobs:
           DOWNLOAD_TOKEN: ${{ github.event.client_payload.release.download_token }}
         run: |
           set -euo pipefail
-          curl --fail --silent --show-error --location             -H "Authorization: Bearer $DOWNLOAD_TOKEN"             "$DOWNLOAD_URL"             -o /tmp/azhand-release.zip
+          curl --fail --silent --show-error --location \
+            -H "Authorization: Bearer $DOWNLOAD_TOKEN" \
+            "$DOWNLOAD_URL" \
+            -o /tmp/azhand-release.zip
 
       - name: Verify SHA-256
         shell: bash
@@ -62,7 +65,8 @@ jobs:
       - name: Validate archive
         shell: python
         run: |
-          import stat, zipfile
+          import stat
+          import zipfile
           from pathlib import PurePosixPath
 
           with zipfile.ZipFile("/tmp/azhand-release.zip") as zf:
@@ -78,7 +82,13 @@ jobs:
                   if total > 300 * 1024 * 1024:
                       raise SystemExit("Expanded ZIP too large")
 
-                  name = info.filename.replace("\", "/")
+                  # ZIP member paths should be POSIX-style. Reject backslashes
+                  # explicitly instead of normalizing them, which also avoids
+                  # any cross-language escaping ambiguity.
+                  name = info.filename
+                  if chr(92) in name:
+                      raise SystemExit(f"Backslash path not allowed: {name}")
+
                   p = PurePosixPath(name)
                   if p.is_absolute() or ".." in p.parts:
                       raise SystemExit(f"Unsafe path: {name}")
@@ -115,7 +125,10 @@ jobs:
           SRC: ${{ steps.root.outputs.src }}
         run: |
           set -euo pipefail
-          rsync -a --delete             --exclude='.git/'             --exclude='.github/workflows/**'             "$SRC"/ ./
+          rsync -a --delete \
+            --exclude='.git/' \
+            --exclude='.github/workflows/**' \
+            "$SRC"/ ./
 
       - name: Commit and push source
         shell: bash
@@ -198,7 +211,13 @@ jobs:
           WORKER_FILE: ${{ steps.worker.outputs.file }}
         run: |
           set -euo pipefail
-          curl --fail --silent --show-error             -X PUT             -H "Authorization: Bearer $DEPLOY_TOKEN"             -H "Content-Type: application/javascript+module"             -H "X-Azhand-Version: $VERSION"             --data-binary "@$WORKER_FILE"             "$DEPLOY_URL"
+          curl --fail --silent --show-error \
+            -X PUT \
+            -H "Authorization: Bearer $DEPLOY_TOKEN" \
+            -H "Content-Type: application/javascript+module" \
+            -H "X-Azhand-Version: $VERSION" \
+            --data-binary "@$WORKER_FILE" \
+            "$DEPLOY_URL"
 
       - name: Summary
         shell: bash
