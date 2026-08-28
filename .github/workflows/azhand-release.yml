@@ -22,17 +22,22 @@ jobs:
         env:
           VERSION: ${{ github.event.client_payload.release.version }}
           DOWNLOAD_URL: ${{ github.event.client_payload.release.download_url }}
-          DOWNLOAD_TOKEN: ${{ github.event.client_payload.release.download_token }}
           DEPLOY_URL: ${{ github.event.client_payload.release.deploy_url }}
-          DEPLOY_TOKEN: ${{ github.event.client_payload.release.deploy_token }}
+          UPDATE_URL: ${{ github.event.client_payload.release.update_url }}
+          API_BASE_URL: ${{ github.event.client_payload.release.api_base_url }}
           EXPECTED_SHA256: ${{ github.event.client_payload.release.sha256 }}
         run: |
           set -euo pipefail
           test -n "$VERSION"
           test -n "$DOWNLOAD_URL"
-          test -n "$DOWNLOAD_TOKEN"
+          jq -e '.client_payload.release.download_token | strings | length > 0' "$GITHUB_EVENT_PATH" >/dev/null
           test -n "$DEPLOY_URL"
-          test -n "$DEPLOY_TOKEN"
+          jq -e '.client_payload.release.deploy_token | strings | length > 0' "$GITHUB_EVENT_PATH" >/dev/null
+          test -n "$UPDATE_URL"
+          jq -e '.client_payload.release.update_token | strings | length > 0' "$GITHUB_EVENT_PATH" >/dev/null
+          jq -e '.client_payload.release.signing_token | strings | length > 0' "$GITHUB_EVENT_PATH" >/dev/null
+          jq -e '.client_payload.release.signing_url | strings | length > 0' "$GITHUB_EVENT_PATH" >/dev/null
+          test -n "$API_BASE_URL"
           test -n "$EXPECTED_SHA256"
 
       - name: Checkout main
@@ -46,7 +51,6 @@ jobs:
         shell: bash
         env:
           DOWNLOAD_URL: ${{ github.event.client_payload.release.download_url }}
-          DOWNLOAD_TOKEN: ${{ github.event.client_payload.release.download_token }}
         run: |
           set -euo pipefail
           curl --fail --silent --show-error --location \
@@ -158,8 +162,111 @@ jobs:
         with:
           gradle-version: "8.9"
 
+      - name: Prepare permanent Android signing identity
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          SIGNING_URL="$(jq -r '.client_payload.release.signing_url' "$GITHUB_EVENT_PATH")"
+          SIGNING_TOKEN="$(jq -r '.client_payload.release.signing_token' "$GITHUB_EVENT_PATH")"
+
+          test -n "$SIGNING_URL"
+          test -n "$SIGNING_TOKEN"
+          test "$SIGNING_URL" != "null"
+          test "$SIGNING_TOKEN" != "null"
+
+          http_code="$(
+            curl --silent --show-error \
+              -o /tmp/azhand-signing.json \
+              -w '%{http_code}' \
+              -H "Authorization: Bearer $SIGNING_TOKEN" \
+              "$SIGNING_URL"
+          )"
+
+          if [ "$http_code" = "200" ]; then
+            python3 - <<'PY'
+          import base64, json, os
+          from pathlib import Path
+
+          data = json.loads(Path("/tmp/azhand-signing.json").read_text())
+          Path("app/azhand-release.jks").write_bytes(
+              base64.b64decode(data["jks_base64"], validate=True)
+          )
+
+          with Path(os.environ["GITHUB_ENV"]).open("a", encoding="utf-8") as f:
+              f.write("ANDROID_KEYSTORE_PATH=azhand-release.jks\n")
+              f.write(f"ANDROID_KEYSTORE_PASSWORD={data['store_password']}\n")
+              f.write(f"ANDROID_KEY_ALIAS={data['alias']}\n")
+              f.write(f"ANDROID_KEY_PASSWORD={data['key_password']}\n")
+          PY
+
+            store_pass="$(jq -r '.store_password' /tmp/azhand-signing.json)"
+            key_pass="$(jq -r '.key_password' /tmp/azhand-signing.json)"
+            echo "::add-mask::$store_pass"
+            echo "::add-mask::$key_pass"
+            echo "Permanent Android signing identity restored from Cloudflare KV."
+          elif [ "$http_code" = "404" ]; then
+            alias="azhand"
+            store_pass="$(openssl rand -hex 24)"
+            key_pass="$(openssl rand -hex 24)"
+
+            echo "::add-mask::$store_pass"
+            echo "::add-mask::$key_pass"
+
+            keytool -genkeypair \
+              -keystore app/azhand-release.jks \
+              -storetype JKS \
+              -storepass "$store_pass" \
+              -keypass "$key_pass" \
+              -alias "$alias" \
+              -keyalg RSA \
+              -keysize 3072 \
+              -validity 10000 \
+              -dname "CN=Azhand, OU=Mobile, O=Azhand"
+
+            STORE_PASS="$store_pass" KEY_PASS="$key_pass" ALIAS="$alias" \
+            python3 - <<'PY'
+          import base64, json, os
+          from pathlib import Path
+
+          payload = {
+              "alias": os.environ["ALIAS"],
+              "store_password": os.environ["STORE_PASS"],
+              "key_password": os.environ["KEY_PASS"],
+              "jks_base64": base64.b64encode(
+                  Path("app/azhand-release.jks").read_bytes()
+              ).decode("ascii")
+          }
+          Path("/tmp/azhand-signing-upload.json").write_text(
+              json.dumps(payload),
+              encoding="utf-8"
+          )
+          PY
+
+            curl --fail --silent --show-error \
+              -X PUT \
+              -H "Authorization: Bearer $SIGNING_TOKEN" \
+              -H "Content-Type: application/json" \
+              --data-binary @/tmp/azhand-signing-upload.json \
+              "$SIGNING_URL"
+
+            {
+              echo "ANDROID_KEYSTORE_PATH=azhand-release.jks"
+              echo "ANDROID_KEYSTORE_PASSWORD=$store_pass"
+              echo "ANDROID_KEY_ALIAS=$alias"
+              echo "ANDROID_KEY_PASSWORD=$key_pass"
+            } >> "$GITHUB_ENV"
+
+            echo "Permanent Android signing identity created and stored in Cloudflare KV."
+          else
+            echo "Signing service HTTP $http_code"
+            exit 1
+          fi
+
       - name: Build Android
         shell: bash
+        env:
+          AZHAND_API_BASE_URL: ${{ github.event.client_payload.release.api_base_url }}
         run: |
           set -euo pipefail
           if [ -x scripts/build-android.sh ]; then
@@ -180,6 +287,24 @@ jobs:
             app/build/outputs/bundle/**/*.aab
           if-no-files-found: error
           retention-days: 14
+
+      - name: Publish signed Android update to Cloudflare KV
+        if: ${{ hashFiles('app/build/outputs/apk/release/*.apk') != '' }}
+        shell: bash
+        env:
+          VERSION: ${{ github.event.client_payload.release.version }}
+          UPDATE_URL: ${{ github.event.client_payload.release.update_url }}
+        run: |
+          set -euo pipefail
+          apk="$(find app/build/outputs/apk/release -type f -name '*.apk' | head -n 1)"
+          test -n "$apk"
+
+          version_code="$(
+            grep -E '^[[:space:]]*versionCode[[:space:]]*=' app/build.gradle.kts               | head -n 1               | sed -E 's/.*=[[:space:]]*([0-9]+).*/\1/'
+          )"
+          test -n "$version_code"
+
+          curl --fail --silent --show-error             -X PUT             -H "Authorization: Bearer $UPDATE_TOKEN"             -H "Content-Type: application/vnd.android.package-archive"             -H "X-Azhand-Version: $VERSION"             -H "X-Azhand-Version-Code: $version_code"             --data-binary "@$apk"             "$UPDATE_URL"
 
       - name: Locate Worker source
         id: worker
@@ -207,7 +332,6 @@ jobs:
         env:
           VERSION: ${{ github.event.client_payload.release.version }}
           DEPLOY_URL: ${{ github.event.client_payload.release.deploy_url }}
-          DEPLOY_TOKEN: ${{ github.event.client_payload.release.deploy_token }}
           WORKER_FILE: ${{ steps.worker.outputs.file }}
         run: |
           set -euo pipefail
@@ -231,5 +355,7 @@ jobs:
             echo "- SHA-256 verified"
             echo "- Android APK built"
             echo "- Android artifact uploaded"
+            echo "- Permanent Android signing identity handled automatically"
+            echo "- Signed release published to Cloudflare KV"
             echo "- Cloudflare Worker deployed"
           } >> "$GITHUB_STEP_SUMMARY"
