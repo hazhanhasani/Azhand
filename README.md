@@ -1,100 +1,86 @@
-# Azhand Release Bot v0.3.3
+# Azhand v0.4.1
 
-## چیزی که عوض شد
+پایه‌ی یکپارچه اپلیکیشن مدیریت مجتمع آژند.
 
-این نسخه بعد از هر ZIP:
+## Android
 
-1. ZIP را از Telegram می‌گیرد.
-2. SHA-256 را محاسبه می‌کند.
-3. ZIP را موقت در KV ذخیره می‌کند.
-4. GitHub Actions را Trigger می‌کند.
-5. Workflow ZIP را دانلود و Verify می‌کند.
-6. محتویات نسخه را روی `main` Sync و Commit می‌کند.
-7. `worker.js` را پیدا می‌کند.
-8. از طریق Endpoint امن ربات، محتوای Worker را روی Cloudflare Deploy می‌کند.
-9. D1/KV/Secrets و سایر تنظیمات Worker دست‌نخورده می‌مانند.
+- Kotlin
+- Jetpack Compose
+- Package: `com.azhand.app`
+- Version: `0.4.1`
+- Debug APK از GitHub Actions ساخته می‌شود.
+- Release فقط وقتی Keystore ثابت در GitHub Secrets ثبت شده باشد ساخته می‌شود.
 
-## Setup خودکار GitHub Workflow
+## PWA
 
-صفحه Setup خودش فایل زیر را در GitHub می‌سازد یا آپدیت می‌کند:
+بعد از Deploy Worker:
 
-`.github/workflows/azhand-release.yml`
+`https://YOUR-WORKER.workers.dev/app`
 
-GitHub Fine-grained PAT باید این مجوزها را روی Repository آژند داشته باشد:
+Manifest:
 
-- Contents: Read and write
-- Workflows: Read and write
+`/manifest.webmanifest`
 
-## Cloudflare Token
+Service Worker:
 
-Cloudflare Token باید:
+`/sw.js`
 
-- Account -> Workers Scripts -> Edit
+## App API
 
-داشته باشد.
+Health:
 
-برخلاف نسخه قبلی، این Token به‌صورت Secret در خود Worker ذخیره می‌شود؛
-چون برای Auto Deploy نسخه‌های بعدی لازم است.
+`GET /api/app/health`
 
-## Bindings
+Demo dashboard:
 
-یک بار از Cloudflare Dashboard متصل کن:
+`GET /api/app/dashboard-demo`
+
+## D1
+
+Schema اپ هنگام اولین درخواست API به صورت idempotent ایجاد می‌شود.
+فایل مرجع SQL نیز در:
+
+`migrations/0002_app_core.sql`
+
+قرار دارد.
+
+## Cloudflare Bindings
 
 - `DB` -> D1
 - `RELEASE_FILES` -> KV
 
-## Worker source detection
+## Release Bot
 
-Workflow به ترتیب دنبال این فایل‌ها می‌گردد:
+نسخه Release Bot داخل همین `worker.js` حفظ شده؛ بنابراین وقتی ZIP پروژه را با ربات Sync می‌کنی، خود ربات حذف نمی‌شود.
 
-- `worker.js`
-- `worker/worker.js`
-- `backend/worker.js`
-- `apps/worker/worker.js`
+## اولین تست
 
-اولین مورد موجود به Cloudflare Deploy می‌شود.
+این ZIP را با Caption زیر برای ربات بفرست:
 
-## نکته مهم
+`v0.4.1`
 
-اگر Worker آژند همان Release Bot است، باید `worker.js` همین Bot در ZIP نسخه‌های بعدی حفظ شود.
-اگر بعداً Backend برنامه را به Worker جدا منتقل کنیم، برای آن یک Target جدا تعریف می‌کنیم.
+بعد از موفقیت:
 
-
-## Fix v0.3.3
-
-- Fixes GitHub HTTP 422:
-  `No more than 10 properties are allowed`
-- `repository_dispatch.client_payload` now contains one top-level key:
-  `release`
-- Workflow reads values from:
-  `github.event.client_payload.release.*`
-- Version detection also works directly from filenames like:
-  `Azhand-Release-Bot-v0.3.3.zip`
-- Bot/dashboard always show the actual build version.
-- Cloudflare Worker auto-deploy remains enabled through the protected deploy gateway.
+1. GitHub main باید فایل‌های پروژه را داشته باشد.
+2. GitHub Actions باید Android debug APK را Build کند.
+3. Worker باید به 0.4.1 آپدیت شود.
+4. مسیر `/app` باید PWA آژند را نشان دهد.
+5. مسیر `/api/app/health` باید `ok: true` برگرداند.
 
 
-## Fix v0.3.3 — Setup page
+## Fix v0.4.1 — GitHub workflow permission
 
-- Setup form no longer performs a normal HTML submit.
-- The page never reloads while saving.
-- Setup runs as a background job using `ctx.waitUntil`.
-- Progress is stored in KV and shown live:
-  GitHub → Telegram → Cloudflare.
-- GitHub Workflow errors are shown with their exact API message.
-- Cloudflare secrets are saved LAST to avoid interrupting GitHub/Telegram setup.
-- If updating Worker secrets switches the Worker version mid-request, the UI keeps polling instead of refreshing.
-- Non-sensitive fields (Account ID, Worker name, GitHub owner/repo, Admin ID) are remembered locally in the browser.
+v0.4.0 reached the local commit stage, but GitHub rejected the push because
+the release tried to create `.github/workflows/android-build.yml`.
 
+v0.4.1 fixes that by:
 
-## Fix v0.3.3 — Setup Admin Key recovery
+- excluding `.github/workflows/**` from ZIP synchronization;
+- removing the separate `android-build.yml` from the release package;
+- letting the Release Bot Setup manage workflow files with the user's
+  fine-grained PAT (`Contents: Read/Write` + `Workflows: Read/Write`);
+- building the Android debug APK inside `azhand-release.yml`;
+- uploading the APK as a GitHub Actions artifact.
 
-- `current_setup_key` comparison now trims accidental whitespace.
-- The current key field is no longer a hard lockout.
-- If the old Setup Admin Key does not match, a valid Cloudflare API Token
-  can authorize recovery/reset of the Setup Admin Key.
-- Cloudflare token validity is checked using Cloudflare's token verification API.
-- The page reports the exact recovery error instead of only saying
-  "کلید فعلی Setup اشتباه است".
-- This recovery path does not weaken the security model: the Cloudflare token
-  already has permission to modify the Worker itself.
+After v0.4.1 deploys, open `/setup` and save once to update the GitHub release
+workflow. Then send v0.4.1 again to test the integrated Android build.
