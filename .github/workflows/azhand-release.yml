@@ -28,18 +28,24 @@ jobs:
           EXPECTED_SHA256: ${{ github.event.client_payload.release.sha256 }}
         run: |
           set -euo pipefail
+
           test -n "$VERSION"
           test -n "$DOWNLOAD_URL"
-          jq -e '.client_payload.release.download_token | strings | length > 0' "$GITHUB_EVENT_PATH" >/dev/null
           test -n "$DEPLOY_URL"
-          jq -e '.client_payload.release.deploy_token | strings | length > 0' "$GITHUB_EVENT_PATH" >/dev/null
           test -n "$UPDATE_URL"
-          jq -e '.client_payload.release.update_token | strings | length > 0' "$GITHUB_EVENT_PATH" >/dev/null
-          jq -e '.client_payload.release.signing_token | strings | length > 0' "$GITHUB_EVENT_PATH" >/dev/null
-          jq -e '.client_payload.release.signing_url | strings | length > 0' "$GITHUB_EVENT_PATH" >/dev/null
           test -n "$API_BASE_URL"
           test -n "$EXPECTED_SHA256"
 
+          jq -e '.client_payload.release.download_token | strings | length > 0' \
+            "$GITHUB_EVENT_PATH" >/dev/null
+          jq -e '.client_payload.release.deploy_token | strings | length > 0' \
+            "$GITHUB_EVENT_PATH" >/dev/null
+          jq -e '.client_payload.release.update_token | strings | length > 0' \
+            "$GITHUB_EVENT_PATH" >/dev/null
+          jq -e '.client_payload.release.signing_token | strings | length > 0' \
+            "$GITHUB_EVENT_PATH" >/dev/null
+          jq -e '.client_payload.release.signing_url | strings | length > 0' \
+            "$GITHUB_EVENT_PATH" >/dev/null
       - name: Checkout main
         uses: actions/checkout@v4
         with:
@@ -53,11 +59,16 @@ jobs:
           DOWNLOAD_URL: ${{ github.event.client_payload.release.download_url }}
         run: |
           set -euo pipefail
+
+          DOWNLOAD_TOKEN="$(
+            jq -er '.client_payload.release.download_token' "$GITHUB_EVENT_PATH"
+          )"
+          test -n "$DOWNLOAD_TOKEN"
+
           curl --fail --silent --show-error --location \
             -H "Authorization: Bearer $DOWNLOAD_TOKEN" \
             "$DOWNLOAD_URL" \
             -o /tmp/azhand-release.zip
-
       - name: Verify SHA-256
         shell: bash
         env:
@@ -167,8 +178,12 @@ jobs:
         run: |
           set -euo pipefail
 
-          SIGNING_URL="$(jq -r '.client_payload.release.signing_url' "$GITHUB_EVENT_PATH")"
-          SIGNING_TOKEN="$(jq -r '.client_payload.release.signing_token' "$GITHUB_EVENT_PATH")"
+          SIGNING_URL="$(
+            jq -er '.client_payload.release.signing_url' "$GITHUB_EVENT_PATH"
+          )"
+          SIGNING_TOKEN="$(
+            jq -er '.client_payload.release.signing_token' "$GITHUB_EVENT_PATH"
+          )"
 
           test -n "$SIGNING_URL"
           test -n "$SIGNING_TOKEN"
@@ -296,16 +311,34 @@ jobs:
           UPDATE_URL: ${{ github.event.client_payload.release.update_url }}
         run: |
           set -euo pipefail
-          apk="$(find app/build/outputs/apk/release -type f -name '*.apk' | head -n 1)"
+
+          UPDATE_TOKEN="$(
+            jq -er '.client_payload.release.update_token' "$GITHUB_EVENT_PATH"
+          )"
+          test -n "$UPDATE_TOKEN"
+
+          apk="$(
+            find app/build/outputs/apk/release \
+              -type f -name '*.apk' \
+              | head -n 1
+          )"
           test -n "$apk"
 
           version_code="$(
-            grep -E '^[[:space:]]*versionCode[[:space:]]*=' app/build.gradle.kts               | head -n 1               | sed -E 's/.*=[[:space:]]*([0-9]+).*/\1/'
+            grep -E '^[[:space:]]*versionCode[[:space:]]*=' app/build.gradle.kts \
+              | head -n 1 \
+              | sed -E 's/.*=[[:space:]]*([0-9]+).*/\1/'
           )"
           test -n "$version_code"
 
-          curl --fail --silent --show-error             -X PUT             -H "Authorization: Bearer $UPDATE_TOKEN"             -H "Content-Type: application/vnd.android.package-archive"             -H "X-Azhand-Version: $VERSION"             -H "X-Azhand-Version-Code: $version_code"             --data-binary "@$apk"             "$UPDATE_URL"
-
+          curl --fail --silent --show-error \
+            -X PUT \
+            -H "Authorization: Bearer $UPDATE_TOKEN" \
+            -H "Content-Type: application/vnd.android.package-archive" \
+            -H "X-Azhand-Version: $VERSION" \
+            -H "X-Azhand-Version-Code: $version_code" \
+            --data-binary "@$apk" \
+            "$UPDATE_URL"
       - name: Locate Worker source
         id: worker
         shell: bash
@@ -335,6 +368,12 @@ jobs:
           WORKER_FILE: ${{ steps.worker.outputs.file }}
         run: |
           set -euo pipefail
+
+          DEPLOY_TOKEN="$(
+            jq -er '.client_payload.release.deploy_token' "$GITHUB_EVENT_PATH"
+          )"
+          test -n "$DEPLOY_TOKEN"
+
           curl --fail --silent --show-error \
             -X PUT \
             -H "Authorization: Bearer $DEPLOY_TOKEN" \
@@ -342,7 +381,6 @@ jobs:
             -H "X-Azhand-Version: $VERSION" \
             --data-binary "@$WORKER_FILE" \
             "$DEPLOY_URL"
-
       - name: Summary
         shell: bash
         env:
