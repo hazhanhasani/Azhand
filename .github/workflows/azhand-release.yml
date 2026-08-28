@@ -1,0 +1,191 @@
+name: Azhand Release Sync
+
+on:
+  repository_dispatch:
+    types: [azhand_zip_release]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: azhand-release-main
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Validate payload
+        shell: bash
+        env:
+          VERSION: ${{ github.event.client_payload.release.version }}
+          DOWNLOAD_URL: ${{ github.event.client_payload.release.download_url }}
+          DOWNLOAD_TOKEN: ${{ github.event.client_payload.release.download_token }}
+          DEPLOY_URL: ${{ github.event.client_payload.release.deploy_url }}
+          DEPLOY_TOKEN: ${{ github.event.client_payload.release.deploy_token }}
+          EXPECTED_SHA256: ${{ github.event.client_payload.release.sha256 }}
+        run: |
+          set -euo pipefail
+          test -n "$VERSION"
+          test -n "$DOWNLOAD_URL"
+          test -n "$DOWNLOAD_TOKEN"
+          test -n "$DEPLOY_URL"
+          test -n "$DEPLOY_TOKEN"
+          test -n "$EXPECTED_SHA256"
+
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Download release ZIP
+        shell: bash
+        env:
+          DOWNLOAD_URL: ${{ github.event.client_payload.release.download_url }}
+          DOWNLOAD_TOKEN: ${{ github.event.client_payload.release.download_token }}
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --location \
+            -H "Authorization: Bearer $DOWNLOAD_TOKEN" \
+            "$DOWNLOAD_URL" -o /tmp/azhand-release.zip
+
+      - name: Verify SHA-256
+        shell: bash
+        env:
+          EXPECTED_SHA256: ${{ github.event.client_payload.release.sha256 }}
+        run: |
+          set -euo pipefail
+          echo "$EXPECTED_SHA256  /tmp/azhand-release.zip" | sha256sum --check
+
+      - name: Validate archive
+        shell: python
+        run: |
+          import stat, zipfile
+          from pathlib import PurePosixPath
+
+          with zipfile.ZipFile("/tmp/azhand-release.zip") as zf:
+              infos = zf.infolist()
+              if not infos:
+                  raise SystemExit("ZIP is empty")
+              if len(infos) > 10000:
+                  raise SystemExit("Too many files")
+
+              total = 0
+              for info in infos:
+                  total += info.file_size
+                  if total > 300 * 1024 * 1024:
+                      raise SystemExit("Expanded ZIP too large")
+
+                  name = info.filename.replace("\\", "/")
+                  p = PurePosixPath(name)
+                  if p.is_absolute() or ".." in p.parts:
+                      raise SystemExit(f"Unsafe path: {name}")
+
+                  mode = (info.external_attr >> 16) & 0xFFFF
+                  if stat.S_ISLNK(mode):
+                      raise SystemExit(f"Symlink not allowed: {name}")
+
+      - name: Extract
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/azhand-extracted
+          mkdir -p /tmp/azhand-extracted
+          unzip -q /tmp/azhand-release.zip -d /tmp/azhand-extracted
+
+      - name: Resolve project root
+        id: root
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s dotglob nullglob
+          entries=(/tmp/azhand-extracted/*)
+          if [ "${#entries[@]}" -eq 1 ] && [ -d "${entries[0]}" ]; then
+            src="${entries[0]}"
+          else
+            src="/tmp/azhand-extracted"
+          fi
+          echo "src=$src" >> "$GITHUB_OUTPUT"
+
+      - name: Sync project to main
+        shell: bash
+        env:
+          SRC: ${{ steps.root.outputs.src }}
+        run: |
+          set -euo pipefail
+          rsync -a --delete \
+            --exclude='.git/' \
+            --exclude='.github/workflows/azhand-release.yml' \
+            "$SRC"/ ./
+
+      - name: Commit and push
+        shell: bash
+        env:
+          VERSION: ${{ github.event.client_payload.release.version }}
+        run: |
+          set -euo pipefail
+          git config user.name "Azhand Release Bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No source changes"
+          else
+            git commit -m "chore(release): import Azhand v$VERSION"
+            git push origin HEAD:main
+          fi
+
+      - name: Locate Worker source
+        id: worker
+        shell: bash
+        run: |
+          set -euo pipefail
+          file=""
+          for candidate in worker.js worker/worker.js backend/worker.js apps/worker/worker.js; do
+            if [ -f "$candidate" ]; then
+              file="$candidate"
+              break
+            fi
+          done
+          if [ -z "$file" ]; then
+            echo "No worker.js found; Cloudflare deploy skipped."
+            echo "found=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Worker source: $file"
+            echo "found=true" >> "$GITHUB_OUTPUT"
+            echo "file=$file" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Deploy Worker through Azhand gateway
+        if: steps.worker.outputs.found == 'true'
+        shell: bash
+        env:
+          VERSION: ${{ github.event.client_payload.release.version }}
+          DEPLOY_URL: ${{ github.event.client_payload.release.deploy_url }}
+          DEPLOY_TOKEN: ${{ github.event.client_payload.release.deploy_token }}
+          WORKER_FILE: ${{ steps.worker.outputs.file }}
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error \
+            -X PUT \
+            -H "Authorization: Bearer $DEPLOY_TOKEN" \
+            -H "Content-Type: application/javascript+module" \
+            -H "X-Azhand-Version: $VERSION" \
+            --data-binary "@$WORKER_FILE" \
+            "$DEPLOY_URL"
+
+      - name: Summary
+        shell: bash
+        env:
+          VERSION: ${{ github.event.client_payload.release.version }}
+        run: |
+          {
+            echo "## ✅ Azhand v$VERSION"
+            echo ""
+            echo "- Repository: synchronized to main"
+            echo "- SHA-256: verified"
+            echo "- Cloudflare Worker: auto deploy completed or skipped if worker.js was absent"
+          } >> "$GITHUB_STEP_SUMMARY"
