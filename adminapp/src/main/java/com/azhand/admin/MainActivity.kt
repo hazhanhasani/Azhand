@@ -69,7 +69,7 @@ fun Login(
             fontWeight = FontWeight.Bold
         )
         Text(
-            "اپلیکیشن مدیر مجتمع • نسخه ۰.۸.۱",
+            "اپلیکیشن مدیر مجتمع • نسخه ۰.۸.۲",
             color = Muted,
             fontSize = 12.sp
         )

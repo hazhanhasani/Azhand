@@ -409,7 +409,7 @@ New APIs:
 No external push provider or payment gateway is required for this release.
 
 
-## v0.8.1 — Admin compile hotfix
+## v0.8.2 — Admin compile hotfix
 
 GitHub Actions Run #19 failed at `Build Android`.
 
@@ -418,7 +418,7 @@ Exact compiler failure:
 - all `AdminApp/Home/Payments/Requests/Members/More` unresolved errors were
   cascading parser errors from that missing brace.
 
-v0.8.1:
+v0.8.2:
 - rewrites Admin Login as normal multi-line Kotlin;
 - adds `validate-kotlin-structure.py` before Gradle;
 - Resident and Admin app are both versionCode 20;
@@ -426,3 +426,29 @@ v0.8.1:
 - a one-time KV bootstrap automatically triggers one fresh build with new
   workflow tokens, so the native Admin APK pipeline activates without a
   manual `/setup` or second ZIP upload.
+
+
+## v0.8.2 — D1 migration and signing transition hotfix
+
+GitHub Actions Run #20:
+- Resident + Admin debug builds succeeded.
+- Upload artifact succeeded.
+- Worker deploy succeeded.
+- D1 migration returned HTTP 500.
+- Signed release was skipped because the previous GitHub workflow exported
+  `ANDROID_KEYSTORE_PATH=azhand-release.jks`, while the restored file was
+  `app/azhand-release.jks`.
+
+D1 root cause:
+`0006_blupal_admin_app.sql` used a SQLite `CREATE TRIGGER ... BEGIN ...; END;`.
+The current Worker migration engine splits versioned migration SQL on
+semicolons, so trigger-body semicolons were split into invalid statements.
+
+Fixes:
+- remove the trigger from migration 0006;
+- scope the unique payment reference index to `gateway='blupal'`;
+- recompute charge paid_amount from the paid ledger after verified Blupal
+  payment, which is retry-safe and idempotent;
+- build script resolves both legacy and current keystore paths;
+- add a migration compatibility test that rejects CREATE TRIGGER before build;
+- new workflow prints the D1 endpoint response body when migration fails.

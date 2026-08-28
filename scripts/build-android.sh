@@ -11,6 +11,8 @@ echo "Validating Blupal integration..."
 python3 scripts/validate-blupal.py
 echo "Validating Kotlin structure..."
 python3 scripts/validate-kotlin-structure.py
+echo "Validating D1 migration compatibility..."
+python3 scripts/validate-migrations.py
 
 if [ ! -f "settings.gradle.kts" ] || [ ! -d "app" ] || [ ! -d "adminapp" ]; then
   echo "Android projects not found."
@@ -27,15 +29,26 @@ fi
 echo "Building resident + admin debug APKs..."
 gradle :app:assembleDebug :adminapp:assembleDebug --stacktrace
 
-if [ -n "${ANDROID_KEYSTORE_PATH:-}" ] &&
+normalized_keystore="${ANDROID_KEYSTORE_PATH:-}"
+
+if [ -n "$normalized_keystore" ] &&
+   [ ! -f "$normalized_keystore" ] &&
+   [ -f "app/$normalized_keystore" ]; then
+  normalized_keystore="app/$normalized_keystore"
+fi
+
+if [ -n "$normalized_keystore" ] &&
    [ -n "${ANDROID_KEYSTORE_PASSWORD:-}" ] &&
    [ -n "${ANDROID_KEY_ALIAS:-}" ] &&
    [ -n "${ANDROID_KEY_PASSWORD:-}" ] &&
-   [ -f "${ANDROID_KEYSTORE_PATH}" ]; then
-  echo "Stable signing key found; building signed resident + admin release APKs..."
+   [ -f "$normalized_keystore" ]; then
+  export ANDROID_KEYSTORE_PATH="$normalized_keystore"
+  echo "Stable signing key found at $ANDROID_KEYSTORE_PATH; building signed resident + admin release APKs..."
   gradle :app:assembleRelease :adminapp:assembleRelease --stacktrace
 else
-  echo "Stable signing secrets are not configured; signed release skipped."
+  echo "Stable signing key could not be resolved; signed release skipped."
+  echo "Requested path: ${ANDROID_KEYSTORE_PATH:-<empty>}"
+  ls -l app/azhand-release.jks 2>/dev/null || true
 fi
 
 echo "Built APK files:"

@@ -44,20 +44,4 @@ CREATE INDEX IF NOT EXISTS idx_gateway_invoices_status
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_payments_gateway_reference
   ON payments(gateway, reference_id)
-  WHERE gateway IS NOT NULL AND reference_id IS NOT NULL;
-
-CREATE TRIGGER IF NOT EXISTS trg_blupal_credit_after_payment
-AFTER INSERT ON payments
-WHEN NEW.gateway = 'blupal'
-  AND NEW.status = 'paid'
-  AND NEW.charge_id IS NOT NULL
-BEGIN
-  UPDATE charges
-  SET
-    paid_amount = MIN(amount, paid_amount + NEW.amount),
-    status = CASE
-      WHEN MIN(amount, paid_amount + NEW.amount) >= amount THEN 'paid'
-      ELSE 'unpaid'
-    END
-  WHERE id = NEW.charge_id;
-END;
+  WHERE gateway = 'blupal' AND reference_id IS NOT NULL;
