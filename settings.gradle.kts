@@ -16,3 +16,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "Azhand"
 include(":app")
+include(":adminapp")

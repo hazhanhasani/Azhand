@@ -76,6 +76,21 @@ data class NotificationData(
     val createdAt: String
 )
 
+data class BlupalInvoiceData(
+    val invoiceId: Long,
+    val chargeId: Long,
+    val chargeTitle: String,
+    val amountToman: Long,
+    val amountRial: Long,
+    val finalAmountRial: Long,
+    val status: String,
+    val paymentLink: String,
+    val cardNumber: String,
+    val mode: String,
+    val receiptNo: String,
+    val createdAt: String
+)
+
 data class DashboardData(
     val profile: ProfileData,
     val totalDue: Long,
@@ -88,7 +103,8 @@ data class DashboardData(
     val expenses: List<ExpenseData>,
     val paymentSubmissions: List<PaymentSubmissionData>,
     val notifications: List<NotificationData>,
-    val unreadNotifications: Int
+    val unreadNotifications: Int,
+    val blupalInvoices: List<BlupalInvoiceData>
 )
 
 class ApiException(val statusCode: Int, message: String) : Exception(message)
@@ -148,6 +164,9 @@ object ApiClient {
                 unreadNotifications = summary.optInt(
                     "unread_notifications",
                     0
+                ),
+                blupalInvoices = parseBlupalInvoices(
+                    json.optJSONArray("blupal_invoices")
                 )
             )
         }
@@ -186,6 +205,34 @@ object ApiClient {
                 .put("reference_id", referenceId)
                 .put("note", note)
         )
+    }
+
+    suspend fun createBlupalInvoice(
+        token: String,
+        chargeId: Long,
+        amountToman: Long
+    ): BlupalInvoiceData = withContext(Dispatchers.IO) {
+        val json = requestJson(
+            method = "POST",
+            path = "/api/app/payments/blupal/create",
+            token = token,
+            body = JSONObject()
+                .put("charge_id", chargeId)
+                .put("amount_toman", amountToman)
+        )
+        parseBlupalInvoice(json.getJSONObject("invoice"))
+    }
+
+    suspend fun checkBlupalInvoice(
+        token: String,
+        invoiceId: Long
+    ): BlupalInvoiceData = withContext(Dispatchers.IO) {
+        val json = requestJson(
+            method = "GET",
+            path = "/api/app/payments/blupal/status?invoice_id=$invoiceId",
+            token = token
+        )
+        parseBlupalInvoice(json.getJSONObject("invoice"))
     }
 
     suspend fun markNotificationRead(
@@ -355,6 +402,33 @@ object ApiClient {
                         createdAt = j.optString("created_at")
                     )
                 )
+            }
+        }
+    }
+
+    private fun parseBlupalInvoice(j: JSONObject): BlupalInvoiceData =
+        BlupalInvoiceData(
+            invoiceId = j.optLong("invoice_id"),
+            chargeId = j.optLong("charge_id"),
+            chargeTitle = j.optString("charge_title"),
+            amountToman = j.optLong("amount_toman"),
+            amountRial = j.optLong("amount_rial"),
+            finalAmountRial = j.optLong("final_amount_rial"),
+            status = j.optString("status"),
+            paymentLink = j.optString("payment_link"),
+            cardNumber = j.optString("card_number"),
+            mode = j.optString("mode"),
+            receiptNo = j.optString("receipt_no"),
+            createdAt = j.optString("created_at")
+        )
+
+    private fun parseBlupalInvoices(
+        array: JSONArray?
+    ): List<BlupalInvoiceData> {
+        if (array == null) return emptyList()
+        return buildList {
+            for (i in 0 until array.length()) {
+                add(parseBlupalInvoice(array.getJSONObject(i)))
             }
         }
     }
