@@ -1,4 +1,4 @@
-name: Azhand Release Sync
+name: Azhand Release Pipeline
 
 on:
   repository_dispatch:
@@ -14,7 +14,7 @@ concurrency:
 jobs:
   release:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 45
 
     steps:
       - name: Validate payload
@@ -49,9 +49,7 @@ jobs:
           DOWNLOAD_TOKEN: ${{ github.event.client_payload.release.download_token }}
         run: |
           set -euo pipefail
-          curl --fail --silent --show-error --location \
-            -H "Authorization: Bearer $DOWNLOAD_TOKEN" \
-            "$DOWNLOAD_URL" -o /tmp/azhand-release.zip
+          curl --fail --silent --show-error --location             -H "Authorization: Bearer $DOWNLOAD_TOKEN"             "$DOWNLOAD_URL"             -o /tmp/azhand-release.zip
 
       - name: Verify SHA-256
         shell: bash
@@ -80,7 +78,7 @@ jobs:
                   if total > 300 * 1024 * 1024:
                       raise SystemExit("Expanded ZIP too large")
 
-                  name = info.filename.replace("\\", "/")
+                  name = info.filename.replace("\", "/")
                   p = PurePosixPath(name)
                   if p.is_absolute() or ".." in p.parts:
                       raise SystemExit(f"Unsafe path: {name}")
@@ -89,7 +87,7 @@ jobs:
                   if stat.S_ISLNK(mode):
                       raise SystemExit(f"Symlink not allowed: {name}")
 
-      - name: Extract
+      - name: Extract release
         shell: bash
         run: |
           set -euo pipefail
@@ -117,12 +115,9 @@ jobs:
           SRC: ${{ steps.root.outputs.src }}
         run: |
           set -euo pipefail
-          rsync -a --delete \
-            --exclude='.git/' \
-            --exclude='.github/workflows/azhand-release.yml' \
-            "$SRC"/ ./
+          rsync -a --delete             --exclude='.git/'             --exclude='.github/workflows/**'             "$SRC"/ ./
 
-      - name: Commit and push
+      - name: Commit and push source
         shell: bash
         env:
           VERSION: ${{ github.event.client_payload.release.version }}
@@ -131,12 +126,47 @@ jobs:
           git config user.name "Azhand Release Bot"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
+
           if git diff --cached --quiet; then
             echo "No source changes"
           else
             git commit -m "chore(release): import Azhand v$VERSION"
             git push origin HEAD:main
           fi
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+
+      - name: Build Android
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -x scripts/build-android.sh ]; then
+            scripts/build-android.sh
+          elif [ -f settings.gradle.kts ] && [ -d app ]; then
+            gradle :app:assembleDebug --stacktrace
+          else
+            echo "Android project not found."
+            exit 1
+          fi
+
+      - name: Upload Android artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Azhand-v${{ github.event.client_payload.release.version }}-android
+          path: |
+            app/build/outputs/apk/**/*.apk
+            app/build/outputs/bundle/**/*.aab
+          if-no-files-found: error
+          retention-days: 14
 
       - name: Locate Worker source
         id: worker
@@ -150,16 +180,15 @@ jobs:
               break
             fi
           done
+
           if [ -z "$file" ]; then
-            echo "No worker.js found; Cloudflare deploy skipped."
             echo "found=false" >> "$GITHUB_OUTPUT"
           else
-            echo "Worker source: $file"
             echo "found=true" >> "$GITHUB_OUTPUT"
             echo "file=$file" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Deploy Worker through Azhand gateway
+      - name: Deploy Worker
         if: steps.worker.outputs.found == 'true'
         shell: bash
         env:
@@ -169,13 +198,7 @@ jobs:
           WORKER_FILE: ${{ steps.worker.outputs.file }}
         run: |
           set -euo pipefail
-          curl --fail --silent --show-error \
-            -X PUT \
-            -H "Authorization: Bearer $DEPLOY_TOKEN" \
-            -H "Content-Type: application/javascript+module" \
-            -H "X-Azhand-Version: $VERSION" \
-            --data-binary "@$WORKER_FILE" \
-            "$DEPLOY_URL"
+          curl --fail --silent --show-error             -X PUT             -H "Authorization: Bearer $DEPLOY_TOKEN"             -H "Content-Type: application/javascript+module"             -H "X-Azhand-Version: $VERSION"             --data-binary "@$WORKER_FILE"             "$DEPLOY_URL"
 
       - name: Summary
         shell: bash
@@ -185,7 +208,9 @@ jobs:
           {
             echo "## ✅ Azhand v$VERSION"
             echo ""
-            echo "- Repository: synchronized to main"
-            echo "- SHA-256: verified"
-            echo "- Cloudflare Worker: auto deploy completed or skipped if worker.js was absent"
+            echo "- Source synced to main"
+            echo "- SHA-256 verified"
+            echo "- Android APK built"
+            echo "- Android artifact uploaded"
+            echo "- Cloudflare Worker deployed"
           } >> "$GITHUB_STEP_SUMMARY"
