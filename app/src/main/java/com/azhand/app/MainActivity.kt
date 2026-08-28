@@ -22,6 +22,9 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import java.text.NumberFormat
 import java.util.Locale
 
@@ -78,9 +81,59 @@ private fun AzhandRoot() {
     var updateInfo by remember { mutableStateOf<AppUpdateInfo?>(null) }
     var updateBusy by remember { mutableStateOf(false) }
     var updateMessage by remember { mutableStateOf<String?>(null) }
+    var updateChecking by remember { mutableStateOf(false) }
+    var updateStatus by remember {
+        mutableStateOf("در انتظار بررسی بروزرسانی")
+    }
+    var lastUpdateCheckAt by remember { mutableLongStateOf(0L) }
+
+    fun requestUpdateCheck(force: Boolean = false) {
+        if (updateChecking) return
+
+        val now = System.currentTimeMillis()
+        if (!force && now - lastUpdateCheckAt < 15_000L) return
+
+        lastUpdateCheckAt = now
+        updateChecking = true
+        updateStatus = "در حال بررسی بروزرسانی..."
+
+        scope.launch {
+            when (val result = UpdateManager.checkForUpdate()) {
+                is UpdateCheckResult.Available -> {
+                    updateInfo = result.info
+                    updateStatus =
+                        "نسخه ${result.info.versionName} آماده نصب است."
+                }
+
+                is UpdateCheckResult.UpToDate -> {
+                    updateInfo = null
+                    updateStatus = "آخرین نسخه نصب است."
+                }
+
+                is UpdateCheckResult.Failed -> {
+                    updateStatus = "خطا: ${result.message}"
+                }
+            }
+            updateChecking = false
+        }
+    }
 
     LaunchedEffect(Unit) {
-        updateInfo = runCatching { UpdateManager.checkForUpdate() }.getOrNull()
+        requestUpdateCheck(force = true)
+    }
+
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                requestUpdateCheck(force = false)
+            }
+        }
+
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
     }
 
     LaunchedEffect(token, refreshKey) {
@@ -131,6 +184,9 @@ private fun AzhandRoot() {
                 loading = dashboardLoading,
                 error = dashboardError,
                 onRefresh = { refreshKey++ },
+                updateStatus = updateStatus,
+                updateChecking = updateChecking,
+                onCheckUpdate = { requestUpdateCheck(force = true) },
                 onCreateRequest = { category, title, description, done ->
                     val current = token
                     if (current == null) {
@@ -310,7 +366,7 @@ private fun LoginScreen(onLoggedIn: (String) -> Unit) {
             }
         }
         Spacer(Modifier.height(18.dp))
-        Text("نسخه ۰.۵.۰", color = TextMuted, fontSize = 11.sp)
+        Text("نسخه ۰.۵.۱", color = TextMuted, fontSize = 11.sp)
     }
 }
 
@@ -320,6 +376,9 @@ private fun ResidentApp(
     loading: Boolean,
     error: String?,
     onRefresh: () -> Unit,
+    updateStatus: String,
+    updateChecking: Boolean,
+    onCheckUpdate: () -> Unit,
     onCreateRequest: (String, String, String, (Boolean, String?) -> Unit) -> Unit,
     onLogout: () -> Unit
 ) {
@@ -356,7 +415,13 @@ private fun ResidentApp(
                     AppTab.FINANCE -> FinanceScreen(dashboard)
                     AppTab.SERVICES -> ServicesScreen(dashboard, onCreateRequest)
                     AppTab.NOTICES -> NoticesScreen(dashboard)
-                    AppTab.ACCOUNT -> AccountScreen(dashboard, onLogout)
+                    AppTab.ACCOUNT -> AccountScreen(
+                        dashboard,
+                        updateStatus,
+                        updateChecking,
+                        onCheckUpdate,
+                        onLogout
+                    )
                 }
             }
         }
@@ -412,7 +477,7 @@ private fun ScreenContainer(
 @Composable
 private fun HomeScreen(data: DashboardData?, onRefresh: () -> Unit) = ScreenContainer(
     title = "آژند",
-    subtitle = "مجتمع تجاری، مسکونی • نسخه ۰.۵.۰"
+    subtitle = "مجتمع تجاری، مسکونی • نسخه ۰.۵.۱"
 ) {
     val profile = data?.profile
     val unitText = when {
@@ -651,11 +716,18 @@ private fun NoticesScreen(data: DashboardData?) = ScreenContainer(
 }
 
 @Composable
-private fun AccountScreen(data: DashboardData?, onLogout: () -> Unit) = ScreenContainer(
+private fun AccountScreen(
+    data: DashboardData?,
+    updateStatus: String,
+    updateChecking: Boolean,
+    onCheckUpdate: () -> Unit,
+    onLogout: () -> Unit
+) = ScreenContainer(
     title = "حساب من",
-    subtitle = "پروفایل و اطلاعات واحد"
+    subtitle = "پروفایل، اطلاعات واحد و بروزرسانی"
 ) {
     val p = data?.profile
+
     Card(
         colors = CardDefaults.cardColors(containerColor = Surface),
         shape = RoundedCornerShape(20.dp),
@@ -667,11 +739,53 @@ private fun AccountScreen(data: DashboardData?, onLogout: () -> Unit) = ScreenCo
             ProfileLine("واحد", p?.unitNumber ?: "—")
             ProfileLine("بلوک", p?.block?.ifBlank { "—" } ?: "—")
             ProfileLine("نوع عضویت", relationLabel(p?.relation.orEmpty()))
-            ProfileLine("نسخه اپ", "۰.۵.۰")
+            ProfileLine("نسخه اپ", BuildConfig.VERSION_NAME)
         }
     }
+
+    Spacer(Modifier.height(14.dp))
+
+    Card(
+        colors = CardDefaults.cardColors(containerColor = Surface2),
+        shape = RoundedCornerShape(18.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(Modifier.padding(17.dp)) {
+            Text(
+                "بروزرسانی اپ",
+                color = TextPrimary,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(Modifier.height(7.dp))
+            Text(
+                updateStatus,
+                color = TextMuted,
+                fontSize = 12.sp
+            )
+            Spacer(Modifier.height(12.dp))
+            Button(
+                enabled = !updateChecking,
+                onClick = onCheckUpdate,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Gold,
+                    contentColor = Navy
+                ),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    if (updateChecking) "در حال بررسی..."
+                    else "بررسی بروزرسانی"
+                )
+            }
+        }
+    }
+
     Spacer(Modifier.height(16.dp))
-    OutlinedButton(onClick = onLogout, modifier = Modifier.fillMaxWidth()) {
+
+    OutlinedButton(
+        onClick = onLogout,
+        modifier = Modifier.fillMaxWidth()
+    ) {
         Text("خروج از حساب")
     }
 }

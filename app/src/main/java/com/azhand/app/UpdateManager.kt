@@ -6,6 +6,7 @@ import android.net.Uri
 import android.os.Build
 import android.provider.Settings
 import androidx.core.content.FileProvider
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
@@ -24,59 +25,112 @@ data class AppUpdateInfo(
     val mandatory: Boolean
 )
 
+sealed interface UpdateCheckResult {
+    data class Available(val info: AppUpdateInfo) : UpdateCheckResult
+
+    data class UpToDate(
+        val latestVersionName: String?,
+        val latestVersionCode: Int?
+    ) : UpdateCheckResult
+
+    data class Failed(val message: String) : UpdateCheckResult
+}
+
 object UpdateManager {
     private const val MAX_APK_BYTES = 20_000_000L
 
-    suspend fun checkForUpdate(): AppUpdateInfo? = withContext(Dispatchers.IO) {
+    suspend fun checkForUpdate(): UpdateCheckResult = withContext(Dispatchers.IO) {
         val base = BuildConfig.API_BASE_URL.trimEnd('/')
         val endpoint =
-            "$base/api/app/update?current_version_code=${BuildConfig.VERSION_CODE}"
+            "$base/api/app/update" +
+            "?current_version_code=${BuildConfig.VERSION_CODE}" +
+            "&_=${System.currentTimeMillis()}"
 
         val connection = (URL(endpoint).openConnection() as HttpURLConnection).apply {
             requestMethod = "GET"
             connectTimeout = 12_000
             readTimeout = 15_000
+            useCaches = false
             setRequestProperty("Accept", "application/json")
+            setRequestProperty("Cache-Control", "no-cache")
+            setRequestProperty("Pragma", "no-cache")
             setRequestProperty("X-Azhand-App-Version", BuildConfig.VERSION_NAME)
         }
 
         try {
-            if (connection.responseCode != HttpURLConnection.HTTP_OK) {
-                return@withContext null
+            val status = connection.responseCode
+            val stream =
+                if (status in 200..299) connection.inputStream else connection.errorStream
+            val payload = stream?.bufferedReader()?.use { it.readText() }.orEmpty()
+
+            if (status != HttpURLConnection.HTTP_OK) {
+                return@withContext UpdateCheckResult.Failed("HTTP $status")
             }
 
-            val payload = connection.inputStream.bufferedReader().use { it.readText() }
-            val json = JSONObject(payload)
+            val json = try {
+                JSONObject(payload)
+            } catch (_: Exception) {
+                return@withContext UpdateCheckResult.Failed(
+                    "پاسخ بروزرسانی نامعتبر است."
+                )
+            }
 
-            if (!json.optBoolean("ok", false) ||
-                !json.optBoolean("update_available", false)
-            ) {
-                return@withContext null
+            if (!json.optBoolean("ok", false)) {
+                return@withContext UpdateCheckResult.Failed(
+                    json.optString("error", "بررسی بروزرسانی ناموفق بود.")
+                )
+            }
+
+            val latestCode = json.optInt("latest_version_code", 0)
+                .takeIf { it > 0 }
+            val latestName = json.optString("latest_version_name")
+                .takeIf { it.isNotBlank() }
+
+            if (!json.optBoolean("update_available", false)) {
+                return@withContext UpdateCheckResult.UpToDate(
+                    latestVersionName = latestName,
+                    latestVersionCode = latestCode
+                )
             }
 
             val apkUrl = json.optString("apk_url")
             val sha256 = json.optString("sha256").lowercase()
-            val versionCode = json.optInt("latest_version_code", 0)
-            val versionName = json.optString("latest_version_name")
+            val versionCode = latestCode ?: 0
+            val versionName = latestName.orEmpty()
             val size = json.optLong("size_bytes", 0L)
 
-            if (apkUrl.isBlank() ||
+            if (
+                apkUrl.isBlank() ||
                 sha256.length != 64 ||
                 versionCode <= BuildConfig.VERSION_CODE ||
+                versionName.isBlank() ||
                 size <= 0L ||
                 size > MAX_APK_BYTES
             ) {
-                return@withContext null
+                return@withContext UpdateCheckResult.Failed(
+                    "اطلاعات نسخه جدید ناقص است."
+                )
             }
 
-            AppUpdateInfo(
-                versionName = versionName,
-                versionCode = versionCode,
-                apkUrl = apkUrl,
-                sha256 = sha256,
-                sizeBytes = size,
-                notes = json.optString("notes", "نسخه جدید آژند آماده نصب است."),
-                mandatory = json.optBoolean("mandatory", false)
+            UpdateCheckResult.Available(
+                AppUpdateInfo(
+                    versionName = versionName,
+                    versionCode = versionCode,
+                    apkUrl = apkUrl,
+                    sha256 = sha256,
+                    sizeBytes = size,
+                    notes = json.optString(
+                        "notes",
+                        "نسخه جدید آژند آماده نصب است."
+                    ),
+                    mandatory = json.optBoolean("mandatory", false)
+                )
+            )
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            UpdateCheckResult.Failed(
+                "ارتباط با سرور بروزرسانی برقرار نشد."
             )
         } finally {
             connection.disconnect()
@@ -96,7 +150,12 @@ object UpdateManager {
             instanceFollowRedirects = true
             connectTimeout = 15_000
             readTimeout = 60_000
-            setRequestProperty("Accept", "application/vnd.android.package-archive")
+            useCaches = false
+            setRequestProperty(
+                "Accept",
+                "application/vnd.android.package-archive"
+            )
+            setRequestProperty("Cache-Control", "no-cache")
         }
 
         try {
@@ -143,7 +202,8 @@ object UpdateManager {
     }
 
     fun startInstaller(context: Context, apk: File): Boolean {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+        if (
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
             !context.packageManager.canRequestPackageInstalls()
         ) {
             val settingsIntent = Intent(
