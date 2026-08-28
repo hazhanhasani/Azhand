@@ -188,7 +188,7 @@ private fun LoginScreen(onLoggedIn: (String) -> Unit) {
         verticalArrangement = Arrangement.Center
     ) {
         Text("آژند", color = Gold, fontSize = 34.sp, fontWeight = FontWeight.Bold)
-        Text("سامانه مجتمع تجاری، مسکونی • نسخه ۰.۸.۰", color = TextMuted, fontSize = 12.sp)
+        Text("سامانه مجتمع تجاری، مسکونی • نسخه ۰.۸.۱", color = TextMuted, fontSize = 12.sp)
         Spacer(Modifier.height(26.dp))
         Card(colors = CardDefaults.cardColors(containerColor = Surface), shape = RoundedCornerShape(22.dp)) {
             Column(Modifier.padding(18.dp)) {
@@ -262,7 +262,7 @@ private fun ResidentApp(
 @Composable
 private fun HomeScreen(data: DashboardData?, onRefresh: () -> Unit) {
     Text("آژند", color = Gold, fontSize = 28.sp, fontWeight = FontWeight.Bold)
-    Text("مجتمع تجاری، مسکونی • نسخه ۰.۸.۰", color = TextMuted, fontSize = 12.sp)
+    Text("مجتمع تجاری، مسکونی • نسخه ۰.۸.۱", color = TextMuted, fontSize = 12.sp)
     Spacer(Modifier.height(16.dp))
     Card(colors = CardDefaults.cardColors(containerColor = Surface), modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(18.dp)) {

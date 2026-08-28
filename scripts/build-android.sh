@@ -9,6 +9,8 @@ echo "Validating release-bot D1 schema..."
 python3 scripts/validate-release-schema.py
 echo "Validating Blupal integration..."
 python3 scripts/validate-blupal.py
+echo "Validating Kotlin structure..."
+python3 scripts/validate-kotlin-structure.py
 
 if [ ! -f "settings.gradle.kts" ] || [ ! -d "app" ] || [ ! -d "adminapp" ]; then
   echo "Android projects not found."

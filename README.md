@@ -407,3 +407,22 @@ New APIs:
 - `POST /api/admin/member/access-code`
 
 No external push provider or payment gateway is required for this release.
+
+
+## v0.8.1 — Admin compile hotfix
+
+GitHub Actions Run #19 failed at `Build Android`.
+
+Exact compiler failure:
+- missing closing brace in `adminapp/MainActivity.kt` Login composable;
+- all `AdminApp/Home/Payments/Requests/Members/More` unresolved errors were
+  cascading parser errors from that missing brace.
+
+v0.8.1:
+- rewrites Admin Login as normal multi-line Kotlin;
+- adds `validate-kotlin-structure.py` before Gradle;
+- Resident and Admin app are both versionCode 20;
+- after first successful deploy, Worker self-syncs the new GitHub workflow;
+- a one-time KV bootstrap automatically triggers one fresh build with new
+  workflow tokens, so the native Admin APK pipeline activates without a
+  manual `/setup` or second ZIP upload.

@@ -46,7 +46,79 @@ enum class Tab(val label:String){HOME("خانه"),PAYMENTS("پرداخت‌ها"
     }
 }
 
-@Composable fun Login(onLogin:(String,(String?)->Unit)->Unit){var key by remember{mutableStateOf("")};var busy by remember{mutableStateOf(false)};var error by remember{mutableStateOf<String?>(null)};Column(Modifier.fillMaxSize().background(Navy).verticalScroll(rememberScrollState()).padding(22.dp),verticalArrangement=Arrangement.Center){Text("مدیریت آژند",color=Gold,fontSize=31.sp,fontWeight=FontWeight.Bold);Text("اپلیکیشن مدیر مجتمع • نسخه ۰.۸.۰",color=Muted,fontSize=12.sp);Spacer(Modifier.height(22.dp));Card(colors=CardDefaults.cardColors(containerColor=Surface)){Column(Modifier.padding(18.dp)){OutlinedTextField(key,{key=it},label={Text("Setup Admin Key")},modifier=Modifier.fillMaxWidth());error?.let{Text(it,color=Bad,fontSize=12.sp)};Button(enabled=!busy&&key.isNotBlank(),onClick={busy=true;onLogin(key){error=it;busy=false}},modifier=Modifier.fillMaxWidth()){Text(if(busy)"در حال ورود..." else "ورود")}}}}
+@Composable
+fun Login(
+    onLogin: (String, (String?) -> Unit) -> Unit
+) {
+    var key by remember { mutableStateOf("") }
+    var busy by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Navy)
+            .verticalScroll(rememberScrollState())
+            .padding(22.dp),
+        verticalArrangement = Arrangement.Center
+    ) {
+        Text(
+            "مدیریت آژند",
+            color = Gold,
+            fontSize = 31.sp,
+            fontWeight = FontWeight.Bold
+        )
+        Text(
+            "اپلیکیشن مدیر مجتمع • نسخه ۰.۸.۱",
+            color = Muted,
+            fontSize = 12.sp
+        )
+
+        Spacer(Modifier.height(22.dp))
+
+        Card(
+            colors = CardDefaults.cardColors(containerColor = Surface)
+        ) {
+            Column(Modifier.padding(18.dp)) {
+                OutlinedTextField(
+                    value = key,
+                    onValueChange = { key = it },
+                    label = { Text("Setup Admin Key") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                error?.let {
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        it,
+                        color = Bad,
+                        fontSize = 12.sp
+                    )
+                }
+
+                Spacer(Modifier.height(10.dp))
+
+                Button(
+                    enabled = !busy && key.isNotBlank(),
+                    onClick = {
+                        busy = true
+                        error = null
+                        onLogin(key) { message ->
+                            error = message
+                            busy = false
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        if (busy) "در حال ورود..."
+                        else "ورود"
+                    )
+                }
+            }
+        }
+    }
+}
 
 @Composable fun AdminApp(data:AdminData?,error:String?,token:String,onChanged:()->Unit,onLogout:()->Unit){var tab by remember{mutableStateOf(Tab.HOME)};Scaffold(containerColor=Navy,bottomBar={NavigationBar(containerColor=Surface){Tab.entries.forEach{NavigationBarItem(selected=tab==it,onClick={tab=it},icon={Text("●")},label={Text(it.label,fontSize=10.sp)})}}}){padding->Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(16.dp)){Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){Column{Text("مدیریت آژند",color=Text,fontSize=24.sp,fontWeight=FontWeight.Bold);Text("نسخه ${BuildConfig.VERSION_NAME}",color=Muted,fontSize=11.sp)};TextButton(onClick=onChanged){Text("بروزرسانی")}};error?.let{Text(it,color=Bad)};Spacer(Modifier.height(12.dp));when(tab){Tab.HOME->Home(data);Tab.PAYMENTS->Payments(data,token,onChanged);Tab.REQUESTS->Requests(data,token,onChanged);Tab.MEMBERS->Members(data,token);Tab.MORE->More(token,onChanged,onLogout)}}}}
 
