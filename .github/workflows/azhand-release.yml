@@ -25,6 +25,7 @@ jobs:
           DEPLOY_URL: ${{ github.event.client_payload.release.deploy_url }}
           UPDATE_URL: ${{ github.event.client_payload.release.update_url }}
           MIGRATION_URL: ${{ github.event.client_payload.release.migration_url }}
+          ADMIN_UPDATE_URL: ${{ github.event.client_payload.release.admin_update_url }}
           API_BASE_URL: ${{ github.event.client_payload.release.api_base_url }}
           EXPECTED_SHA256: ${{ github.event.client_payload.release.sha256 }}
         run: |
@@ -35,6 +36,7 @@ jobs:
           test -n "$DEPLOY_URL"
           test -n "$UPDATE_URL"
           test -n "$MIGRATION_URL"
+          test -n "$ADMIN_UPDATE_URL"
           test -n "$API_BASE_URL"
           test -n "$EXPECTED_SHA256"
 
@@ -49,6 +51,8 @@ jobs:
           jq -e '.client_payload.release.signing_url | strings | length > 0' \
             "$GITHUB_EVENT_PATH" >/dev/null
           jq -e '.client_payload.release.migration_token | strings | length > 0' \
+            "$GITHUB_EVENT_PATH" >/dev/null
+          jq -e '.client_payload.release.admin_update_token | strings | length > 0' \
             "$GITHUB_EVENT_PATH" >/dev/null
       - name: Checkout main
         uses: actions/checkout@v4
@@ -213,7 +217,7 @@ jobs:
           )
 
           with Path(os.environ["GITHUB_ENV"]).open("a", encoding="utf-8") as f:
-              f.write("ANDROID_KEYSTORE_PATH=azhand-release.jks\n")
+              f.write("ANDROID_KEYSTORE_PATH=app/azhand-release.jks\n")
               f.write(f"ANDROID_KEYSTORE_PASSWORD={data['store_password']}\n")
               f.write(f"ANDROID_KEY_ALIAS={data['alias']}\n")
               f.write(f"ANDROID_KEY_PASSWORD={data['key_password']}\n")
@@ -270,7 +274,7 @@ jobs:
               "$SIGNING_URL"
 
             {
-              echo "ANDROID_KEYSTORE_PATH=azhand-release.jks"
+              echo "ANDROID_KEYSTORE_PATH=app/azhand-release.jks"
               echo "ANDROID_KEYSTORE_PASSWORD=$store_pass"
               echo "ANDROID_KEY_ALIAS=$alias"
               echo "ANDROID_KEY_PASSWORD=$key_pass"
@@ -304,6 +308,8 @@ jobs:
           path: |
             app/build/outputs/apk/**/*.apk
             app/build/outputs/bundle/**/*.aab
+            adminapp/build/outputs/apk/**/*.apk
+            adminapp/build/outputs/bundle/**/*.aab
           if-no-files-found: error
           retention-days: 14
 
@@ -343,6 +349,43 @@ jobs:
             -H "X-Azhand-Version-Code: $version_code" \
             --data-binary "@$apk" \
             "$UPDATE_URL"
+      - name: Publish signed Admin Android update to Cloudflare KV
+        if: ${{ hashFiles('adminapp/build/outputs/apk/release/*.apk') != '' }}
+        shell: bash
+        env:
+          VERSION: ${{ github.event.client_payload.release.version }}
+          ADMIN_UPDATE_URL: ${{ github.event.client_payload.release.admin_update_url }}
+        run: |
+          set -euo pipefail
+
+          ADMIN_UPDATE_TOKEN="$(
+            jq -er '.client_payload.release.admin_update_token' "$GITHUB_EVENT_PATH"
+          )"
+          test -n "$ADMIN_UPDATE_TOKEN"
+
+          apk="$(
+            find adminapp/build/outputs/apk/release \
+              -type f -name '*.apk' \
+              | head -n 1
+          )"
+          test -n "$apk"
+
+          version_code="$(
+            grep -E '^[[:space:]]*versionCode[[:space:]]*=' adminapp/build.gradle.kts \
+              | head -n 1 \
+              | sed -E 's/.*=[[:space:]]*([0-9]+).*/\1/'
+          )"
+          test -n "$version_code"
+
+          curl --fail --silent --show-error \
+            -X PUT \
+            -H "Authorization: Bearer $ADMIN_UPDATE_TOKEN" \
+            -H "Content-Type: application/vnd.android.package-archive" \
+            -H "X-Azhand-Version: $VERSION" \
+            -H "X-Azhand-Version-Code: $version_code" \
+            --data-binary "@$apk" \
+            "$ADMIN_UPDATE_URL"
+
       - name: Locate Worker source
         id: worker
         shell: bash
@@ -414,9 +457,10 @@ jobs:
             echo "- Source synced to main"
             echo "- SHA-256 verified"
             echo "- Android APK built"
-            echo "- Android artifact uploaded"
+            echo "- Resident + Admin Android artifacts uploaded"
             echo "- Permanent Android signing identity handled automatically"
-            echo "- Signed release published to Cloudflare KV"
+            echo "- Resident signed release published to Cloudflare KV"
+            echo "- Admin signed release published to Cloudflare KV"
             echo "- Cloudflare Worker deployed"
             echo "- D1 app migrations applied automatically"
           } >> "$GITHUB_STEP_SUMMARY"
