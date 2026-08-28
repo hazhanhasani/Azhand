@@ -24,6 +24,7 @@ jobs:
           DOWNLOAD_URL: ${{ github.event.client_payload.release.download_url }}
           DEPLOY_URL: ${{ github.event.client_payload.release.deploy_url }}
           UPDATE_URL: ${{ github.event.client_payload.release.update_url }}
+          MIGRATION_URL: ${{ github.event.client_payload.release.migration_url }}
           API_BASE_URL: ${{ github.event.client_payload.release.api_base_url }}
           EXPECTED_SHA256: ${{ github.event.client_payload.release.sha256 }}
         run: |
@@ -33,6 +34,7 @@ jobs:
           test -n "$DOWNLOAD_URL"
           test -n "$DEPLOY_URL"
           test -n "$UPDATE_URL"
+          test -n "$MIGRATION_URL"
           test -n "$API_BASE_URL"
           test -n "$EXPECTED_SHA256"
 
@@ -45,6 +47,8 @@ jobs:
           jq -e '.client_payload.release.signing_token | strings | length > 0' \
             "$GITHUB_EVENT_PATH" >/dev/null
           jq -e '.client_payload.release.signing_url | strings | length > 0' \
+            "$GITHUB_EVENT_PATH" >/dev/null
+          jq -e '.client_payload.release.migration_token | strings | length > 0' \
             "$GITHUB_EVENT_PATH" >/dev/null
       - name: Checkout main
         uses: actions/checkout@v4
@@ -381,6 +385,24 @@ jobs:
             -H "X-Azhand-Version: $VERSION" \
             --data-binary "@$WORKER_FILE" \
             "$DEPLOY_URL"
+      - name: Apply D1 app migrations
+        shell: bash
+        env:
+          MIGRATION_URL: ${{ github.event.client_payload.release.migration_url }}
+        run: |
+          set -euo pipefail
+
+          MIGRATION_TOKEN="$(
+            jq -er '.client_payload.release.migration_token' "$GITHUB_EVENT_PATH"
+          )"
+          test -n "$MIGRATION_TOKEN"
+
+          curl --fail --silent --show-error \
+            -X POST \
+            -H "Authorization: Bearer $MIGRATION_TOKEN" \
+            -H "Accept: application/json" \
+            "$MIGRATION_URL"
+
       - name: Summary
         shell: bash
         env:
@@ -396,4 +418,5 @@ jobs:
             echo "- Permanent Android signing identity handled automatically"
             echo "- Signed release published to Cloudflare KV"
             echo "- Cloudflare Worker deployed"
+            echo "- D1 app migrations applied automatically"
           } >> "$GITHUB_STEP_SUMMARY"
