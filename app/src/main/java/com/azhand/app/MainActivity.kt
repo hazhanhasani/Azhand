@@ -396,7 +396,7 @@ private fun LoginScreen(onLoggedIn: (String) -> Unit) {
             }
         }
         Spacer(Modifier.height(18.dp))
-        Text("نسخه ۰.۶.۱", color = TextMuted, fontSize = 11.sp)
+        Text("نسخه ۰.۶.۲", color = TextMuted, fontSize = 11.sp)
     }
 }
 
@@ -514,7 +514,7 @@ private fun ScreenContainer(
 @Composable
 private fun HomeScreen(data: DashboardData?, onRefresh: () -> Unit) = ScreenContainer(
     title = "آژند",
-    subtitle = "مجتمع تجاری، مسکونی • نسخه ۰.۶.۱"
+    subtitle = "مجتمع تجاری، مسکونی • نسخه ۰.۶.۲"
 ) {
     val profile = data?.profile
     val unitText = when {

@@ -5,6 +5,8 @@ echo "== Azhand Android build =="
 
 echo "Validating embedded Manager/PWA JavaScript..."
 python3 scripts/validate-web-assets.py
+echo "Validating release-bot D1 schema..."
+python3 scripts/validate-release-schema.py
 
 if [ ! -f "settings.gradle.kts" ] || [ ! -d "app" ]; then
   echo "Android project not found."
