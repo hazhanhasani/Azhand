@@ -538,8 +538,28 @@ callback page, native Admin app, shared launcher icon and separate update
 channels.
 
 
-## v0.9.2 — Worker deploy hotfix
+## v0.9.3 — Two-stage Worker deployment recovery
 
-Run #27 reached and passed Android build, artifact upload, Resident signed update publish and Admin signed update publish, then failed at `Deploy Worker` with outer HTTP 502. D1 migration was therefore skipped.
+Runs #27 and #28 both built and published the Resident/Admin APKs, then failed
+at Worker deployment while the currently deployed v0.9.0 release bot still
+uploaded Workers with legacy metadata.
 
-Hotfixes: scheduled handler simplified to Cloudflare's documented module form; Cron Schedules API update body fixed to the documented raw JSON array; future self-deploy uploads set compatibility_date 2026-08-29; future release workflow deploys print the response body and retry transient 429/5xx failures up to three times.
+v0.9.3 breaks that bootstrap loop with a two-stage recovery:
+
+1. GitHub uploads a fetch-only recovery bridge that is compatible with the
+   last-known-good v0.9.0 deploy endpoint.
+2. D1 migration runs on the bridge.
+3. The bridge writes the hardened release workflow to GitHub using the
+   repository-scoped release PAT.
+4. The bridge writes the normal v0.9.3 Stage-2 `worker.js` to main.
+5. The bridge deploys Stage-2 directly with compatibility_date 2026-08-29.
+6. Stage-2 restores the documented 3-argument scheduled handler and syncs the
+   daily Cloudflare Cron Trigger.
+
+The recovery migration intentionally skips the old automatic bootstrap rebuild
+so Stage-2 is not immediately overwritten by the bridge.
+
+Also fixed:
+- malformed `adminData()` introduced during v0.9.1 generation;
+- idempotent monthly billing catch-up from Resident/Admin dashboard requests,
+  so a missed Cron still cannot leave a Jalali month unbilled.

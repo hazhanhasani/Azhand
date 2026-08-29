@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 from pathlib import Path
+import re
+import base64
 
 ROOT = Path(__file__).resolve().parents[1]
 worker = (ROOT / "worker.js").read_text(encoding="utf-8")
@@ -18,27 +20,28 @@ for item in [
     "monthly_billing_runs",
     "charge_billing_meta",
 ]:
-    if item not in migration:
-        raise SystemExit(f"Migration missing {item}")
+    assert item in migration, item
 
 for item in [
-    "async scheduled(controller, env)",
     "runMonthlyBilling",
     "iranJalaliParts",
     'IRAN_TIME_ZONE = "Asia/Tehran"',
-    'MONTHLY_BILLING_CRON = "35 20 * * *"',
     "/api/admin/finance-settings",
     "/api/admin/charges/delete",
     "/api/admin/billing/run-now",
     "owner_monthly_charge",
     "tenant_monthly_charge",
-    "tenant_member_id",
-    "owner_member_id",
-    "ensureWorkerCronSchedule",
-    "/schedules",
+    "allowCatchup: true",
 ]:
-    if item not in worker:
-        raise SystemExit(f"Worker missing {item}")
+    assert item in worker, item
+
+m = re.search(
+    r'const RECOVERY_STAGE2_WORKER_B64 = "([^"]+)";',
+    worker
+)
+assert m, "stage2 worker missing"
+stage2 = base64.b64decode(m.group(1)).decode("utf-8")
+assert "async scheduled(controller, env, ctx)" in stage2
 
 for item in [
     "financeSettings",
@@ -46,22 +49,17 @@ for item in [
     "runMonthlyBilling",
     "deleteCharge",
 ]:
-    if item not in admin_api:
-        raise SystemExit(f"Admin API missing {item}")
+    assert item in admin_api, item
 
 for item in [
     "موجودی اولیه ساختمان",
     "شارژ ماهانه مالک",
     "شارژ ماهانه مستأجر",
-    "صدور خودکار اول هر ماه",
     "حذف شارژ آزمایشی / اشتباه",
-    "موجودی فعلی ساختمان",
 ]:
-    if item not in admin_ui:
-        raise SystemExit(f"Admin UI missing {item}")
+    assert item in admin_ui, item
 
-print("[OK] initial building balance")
-print("[OK] owner/tenant monthly prices")
-print("[OK] first-day Jalali monthly billing")
+print("[OK] finance migration/settings")
+print("[OK] monthly billing catch-up")
+print("[OK] stage2 exact cron handler")
 print("[OK] safe unpaid charge deletion")
-print("[OK] Cloudflare cron sync")

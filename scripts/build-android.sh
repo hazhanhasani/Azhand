@@ -17,6 +17,8 @@ echo "Validating Admin app design/icon..."
 python3 scripts/validate-admin-ui.py
 echo "Validating Admin operational parity..."
 python3 scripts/validate-admin-operations.py
+echo "Validating Admin dashboard data..."
+python3 scripts/validate-admin-data.py
 echo "Validating Jalali/Iran time..."
 python3 scripts/validate-jalali-time.py
 echo "Validating finance automation..."

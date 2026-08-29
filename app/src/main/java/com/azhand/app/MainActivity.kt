@@ -470,7 +470,7 @@ private fun LoginScreen(onLoggedIn: (String) -> Unit) {
             }
         }
         Spacer(Modifier.height(18.dp))
-        Text("نسخه ۰.۹.۲", color = TextMuted, fontSize = 11.sp)
+        Text("نسخه ۰.۹.۳", color = TextMuted, fontSize = 11.sp)
     }
 }
 
@@ -663,7 +663,7 @@ private fun HomeScreen(
     onRefresh: () -> Unit
 ) = ScreenContainer(
     title = "آژند",
-    subtitle = "مجتمع تجاری، مسکونی • نسخه ۰.۹.۲"
+    subtitle = "مجتمع تجاری، مسکونی • نسخه ۰.۹.۳"
 ) {
     val profile = data?.profile
 
