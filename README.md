@@ -409,7 +409,7 @@ New APIs:
 No external push provider or payment gateway is required for this release.
 
 
-## v0.8.4 — Admin compile hotfix
+## v0.9.0 — Admin compile hotfix
 
 GitHub Actions Run #19 failed at `Build Android`.
 
@@ -418,7 +418,7 @@ Exact compiler failure:
 - all `AdminApp/Home/Payments/Requests/Members/More` unresolved errors were
   cascading parser errors from that missing brace.
 
-v0.8.4:
+v0.9.0:
 - rewrites Admin Login as normal multi-line Kotlin;
 - adds `validate-kotlin-structure.py` before Gradle;
 - Resident and Admin app are both versionCode 20;
@@ -428,7 +428,7 @@ v0.8.4:
   manual `/setup` or second ZIP upload.
 
 
-## v0.8.4 — D1 migration and signing transition hotfix
+## v0.9.0 — D1 migration and signing transition hotfix
 
 GitHub Actions Run #20:
 - Resident + Admin debug builds succeeded.
@@ -454,12 +454,12 @@ Fixes:
 - new workflow prints the D1 endpoint response body when migration fails.
 
 
-## v0.8.4 — Resident UI regression recovery
+## v0.9.0 — Resident UI regression recovery
 
 The resident Android UI was unintentionally simplified in v0.8.0 while
 Blupal and the native Admin app were introduced.
 
-v0.8.4 uses the complete v0.7.0 resident UI as the visual/functional baseline
+v0.9.0 uses the complete v0.7.0 resident UI as the visual/functional baseline
 and merges all newer backend capabilities on top of it.
 
 Restored:
@@ -490,7 +490,7 @@ The release now fails if core resident UI/functionality is accidentally
 removed again.
 
 
-## v0.8.4 — Admin redesign + shared icon + Blupal callback UX
+## v0.9.0 — Admin redesign + shared icon + Blupal callback UX
 
 Admin Android:
 - exact same launcher icon bytes as the resident app at all densities;
@@ -509,3 +509,30 @@ Blupal callback:
 - callback page polls status and re-verifies PENDING invoices server-to-server;
 - resident Android and PWA open the Azhand callback page first;
 - no API key or resident bearer token is exposed in the callback URL.
+
+
+## v0.9.0 — Native Admin operational parity
+
+The Admin Android app can now handle routine building operations without
+falling back to `/manage`.
+
+Native Admin additions:
+- create resident/owner/tenant and the associated unit;
+- immediately issue the resident access code;
+- search residents by name, mobile, block or unit;
+- bulk-issue a monthly charge to every active unit or one selected block;
+- save and reuse charge templates;
+- search service requests by resident, title, category or unit;
+- financial overview for billed, collected and outstanding amounts.
+
+Backend additions:
+- `POST /api/admin/charges/bulk`
+- `GET /api/admin/charge-templates`
+- `POST /api/admin/charge-template`
+
+Migration:
+- `0008_charge_templates.sql`
+
+All v0.8.4 functionality remains: resident UI baseline, Blupal payment,
+callback page, native Admin app, shared launcher icon and separate update
+channels.

@@ -11,7 +11,12 @@ data class AdminSummary(
     val members: Int,
     val units: Int,
     val pendingPayments: Int,
-    val openRequests: Int
+    val openRequests: Int,
+    val totalBilled: Long,
+    val totalPaid: Long,
+    val totalDue: Long,
+    val paidCharges: Int,
+    val openCharges: Int
 )
 
 data class AdminMember(
@@ -66,6 +71,29 @@ data class AdminOnlinePayment(
     val createdAt: String
 )
 
+data class CreateMemberResult(
+    val memberId: Long,
+    val unitId: Long,
+    val accessCode: String
+)
+
+data class BulkChargeResult(
+    val periodId: Long,
+    val periodKey: String,
+    val title: String,
+    val amount: Long,
+    val unitsTargeted: Int,
+    val rowsChanged: Int
+)
+
+data class ChargeTemplate(
+    val id: Long,
+    val title: String,
+    val amount: Long,
+    val dueDay: Int,
+    val block: String
+)
+
 data class BlupalIntegration(
     val configured: Boolean,
     val mode: String,
@@ -88,39 +116,309 @@ class AdminApiException(
 ) : Exception(message)
 
 object AdminApi {
-    private fun base() = BuildConfig.API_BASE_URL.trimEnd('/')
+    private fun base() =
+        BuildConfig.API_BASE_URL.trimEnd('/')
 
-    suspend fun login(key: String): String = withContext(Dispatchers.IO) {
+    suspend fun login(
+        key: String
+    ): String = withContext(Dispatchers.IO) {
         request(
             "POST",
             "/api/admin/auth/login",
-            body = JSONObject().put("admin_key", key)
+            body = JSONObject().put(
+                "admin_key",
+                key
+            )
         ).getString("token")
     }
 
-    suspend fun data(token: String): AdminData = withContext(Dispatchers.IO) {
-        val j = request("GET", "/api/admin/data", token)
+    suspend fun data(
+        token: String
+    ): AdminData = withContext(Dispatchers.IO) {
+        val j = request(
+            "GET",
+            "/api/admin/data",
+            token
+        )
         val s = j.getJSONObject("summary")
 
         AdminData(
             summary = AdminSummary(
                 members = s.optInt("members"),
                 units = s.optInt("units"),
-                pendingPayments = s.optInt("pending_payments"),
-                openRequests = s.optInt("open_requests")
+                pendingPayments =
+                    s.optInt("pending_payments"),
+                openRequests =
+                    s.optInt("open_requests"),
+                totalBilled =
+                    s.optLong("total_billed"),
+                totalPaid =
+                    s.optLong("total_paid"),
+                totalDue =
+                    s.optLong("total_due"),
+                paidCharges =
+                    s.optInt("paid_charges"),
+                openCharges =
+                    s.optInt("open_charges")
             ),
-            members = parseMembers(j.optJSONArray("members")),
-            payments = parsePayments(
-                j.optJSONArray("payment_submissions")
-            ),
-            requests = parseRequests(
-                j.optJSONArray("service_requests")
-            ),
-            charges = parseCharges(j.optJSONArray("charges")),
-            onlinePayments = parseOnlinePayments(
-                j.optJSONArray("blupal_invoices")
-            )
+            members =
+                parseMembers(
+                    j.optJSONArray("members")
+                ),
+            payments =
+                parsePayments(
+                    j.optJSONArray(
+                        "payment_submissions"
+                    )
+                ),
+            requests =
+                parseRequests(
+                    j.optJSONArray(
+                        "service_requests"
+                    )
+                ),
+            charges =
+                parseCharges(
+                    j.optJSONArray("charges")
+                ),
+            onlinePayments =
+                parseOnlinePayments(
+                    j.optJSONArray(
+                        "blupal_invoices"
+                    )
+                )
         )
+    }
+
+    suspend fun createMember(
+        token: String,
+        fullName: String,
+        mobile: String,
+        block: String,
+        unitNumber: String,
+        relation: String
+    ): CreateMemberResult =
+        withContext(Dispatchers.IO) {
+            val j = request(
+                "POST",
+                "/api/admin/member",
+                token,
+                JSONObject()
+                    .put(
+                        "full_name",
+                        fullName
+                    )
+                    .put(
+                        "mobile",
+                        mobile
+                    )
+                    .put(
+                        "block",
+                        block
+                    )
+                    .put(
+                        "unit_number",
+                        unitNumber
+                    )
+                    .put(
+                        "relation",
+                        relation
+                    )
+            )
+
+            CreateMemberResult(
+                memberId =
+                    j.optLong("member_id"),
+                unitId =
+                    j.optLong("unit_id"),
+                accessCode =
+                    j.optString(
+                        "access_code"
+                    )
+            )
+        }
+
+    suspend fun createSingleCharge(
+        token: String,
+        periodKey: String,
+        title: String,
+        dueDate: String,
+        block: String,
+        unitNumber: String,
+        amount: Long
+    ): Long = withContext(Dispatchers.IO) {
+        request(
+            "POST",
+            "/api/admin/charge",
+            token,
+            JSONObject()
+                .put(
+                    "period_key",
+                    periodKey
+                )
+                .put(
+                    "title",
+                    title
+                )
+                .put(
+                    "due_date",
+                    dueDate
+                )
+                .put(
+                    "block",
+                    block
+                )
+                .put(
+                    "unit_number",
+                    unitNumber
+                )
+                .put(
+                    "amount",
+                    amount
+                )
+        ).optLong("charge_id")
+    }
+
+    suspend fun createBulkCharges(
+        token: String,
+        periodKey: String,
+        title: String,
+        amount: Long,
+        dueDate: String,
+        block: String,
+        templateId: Long = 0
+    ): BulkChargeResult =
+        withContext(Dispatchers.IO) {
+            val j = request(
+                "POST",
+                "/api/admin/charges/bulk",
+                token,
+                JSONObject()
+                    .put(
+                        "period_key",
+                        periodKey
+                    )
+                    .put(
+                        "title",
+                        title
+                    )
+                    .put(
+                        "amount",
+                        amount
+                    )
+                    .put(
+                        "due_date",
+                        dueDate
+                    )
+                    .put(
+                        "block",
+                        block
+                    )
+                    .put(
+                        "template_id",
+                        templateId
+                    )
+            )
+
+            BulkChargeResult(
+                periodId =
+                    j.optLong("period_id"),
+                periodKey =
+                    j.optString(
+                        "period_key"
+                    ),
+                title =
+                    j.optString("title"),
+                amount =
+                    j.optLong("amount"),
+                unitsTargeted =
+                    j.optInt(
+                        "units_targeted"
+                    ),
+                rowsChanged =
+                    j.optInt(
+                        "rows_changed"
+                    )
+            )
+        }
+
+    suspend fun chargeTemplates(
+        token: String
+    ): List<ChargeTemplate> =
+        withContext(Dispatchers.IO) {
+            val j = request(
+                "GET",
+                "/api/admin/charge-templates",
+                token
+            )
+            val a =
+                j.optJSONArray("templates")
+
+            buildList {
+                if (a != null) {
+                    for (
+                        i in 0 until a.length()
+                    ) {
+                        val x =
+                            a.getJSONObject(i)
+
+                        add(
+                            ChargeTemplate(
+                                id =
+                                    x.optLong("id"),
+                                title =
+                                    x.optString(
+                                        "title"
+                                    ),
+                                amount =
+                                    x.optLong(
+                                        "amount"
+                                    ),
+                                dueDay =
+                                    x.optInt(
+                                        "due_day",
+                                        10
+                                    ),
+                                block =
+                                    x.optString(
+                                        "block"
+                                    )
+                            )
+                        )
+                    }
+                }
+            }
+        }
+
+    suspend fun saveChargeTemplate(
+        token: String,
+        title: String,
+        amount: Long,
+        dueDay: Int,
+        block: String
+    ): Long = withContext(Dispatchers.IO) {
+        request(
+            "POST",
+            "/api/admin/charge-template",
+            token,
+            JSONObject()
+                .put(
+                    "title",
+                    title
+                )
+                .put(
+                    "amount",
+                    amount
+                )
+                .put(
+                    "due_day",
+                    dueDay
+                )
+                .put(
+                    "block",
+                    block
+                )
+        ).optLong("id")
     }
 
     suspend fun reviewPayment(
@@ -134,9 +432,18 @@ object AdminApi {
             "/api/admin/payment/review",
             token,
             JSONObject()
-                .put("payment_submission_id", id)
-                .put("status", status)
-                .put("reviewer_note", note)
+                .put(
+                    "payment_submission_id",
+                    id
+                )
+                .put(
+                    "status",
+                    status
+                )
+                .put(
+                    "reviewer_note",
+                    note
+                )
         )
     }
 
@@ -151,9 +458,18 @@ object AdminApi {
             "/api/admin/service-request/status",
             token,
             JSONObject()
-                .put("request_id", id)
-                .put("status", status)
-                .put("note", note)
+                .put(
+                    "request_id",
+                    id
+                )
+                .put(
+                    "status",
+                    status
+                )
+                .put(
+                    "note",
+                    note
+                )
         )
     }
 
@@ -165,7 +481,10 @@ object AdminApi {
             "POST",
             "/api/admin/member/access-code",
             token,
-            JSONObject().put("member_id", id)
+            JSONObject().put(
+                "member_id",
+                id
+            )
         ).getString("access_code")
     }
 
@@ -181,11 +500,26 @@ object AdminApi {
             "/api/admin/expense",
             token,
             JSONObject()
-                .put("title", title)
-                .put("category", category)
-                .put("amount", amount)
-                .put("expense_date", date)
-                .put("description", "")
+                .put(
+                    "title",
+                    title
+                )
+                .put(
+                    "category",
+                    category
+                )
+                .put(
+                    "amount",
+                    amount
+                )
+                .put(
+                    "expense_date",
+                    date
+                )
+                .put(
+                    "description",
+                    ""
+                )
         )
     }
 
@@ -199,27 +533,48 @@ object AdminApi {
             "/api/admin/announcement",
             token,
             JSONObject()
-                .put("title", title)
-                .put("body", body)
-                .put("priority", "normal")
+                .put(
+                    "title",
+                    title
+                )
+                .put(
+                    "body",
+                    body
+                )
+                .put(
+                    "priority",
+                    "normal"
+                )
         )
     }
 
     suspend fun blupal(
         token: String
-    ): BlupalIntegration = withContext(Dispatchers.IO) {
-        val j = request(
-            "GET",
-            "/api/admin/integrations/blupal",
-            token
-        )
-        BlupalIntegration(
-            configured = j.optBoolean("configured"),
-            mode = j.optString("mode"),
-            webhookUrl = j.optString("webhook_url"),
-            callbackPage = j.optString("callback_page")
-        )
-    }
+    ): BlupalIntegration =
+        withContext(Dispatchers.IO) {
+            val j = request(
+                "GET",
+                "/api/admin/integrations/blupal",
+                token
+            )
+
+            BlupalIntegration(
+                configured =
+                    j.optBoolean(
+                        "configured"
+                    ),
+                mode =
+                    j.optString("mode"),
+                webhookUrl =
+                    j.optString(
+                        "webhook_url"
+                    ),
+                callbackPage =
+                    j.optString(
+                        "callback_page"
+                    )
+            )
+        }
 
     suspend fun configureBlupal(
         token: String,
@@ -229,21 +584,25 @@ object AdminApi {
             "POST",
             "/api/admin/integrations/blupal/configure",
             token,
-            JSONObject().put("api_key", key)
+            JSONObject().put(
+                "api_key",
+                key
+            )
         )
     }
 
-    suspend fun logout(token: String) =
-        withContext(Dispatchers.IO) {
-            runCatching {
-                request(
-                    "POST",
-                    "/api/admin/auth/logout",
-                    token,
-                    JSONObject()
-                )
-            }
+    suspend fun logout(
+        token: String
+    ) = withContext(Dispatchers.IO) {
+        runCatching {
+            request(
+                "POST",
+                "/api/admin/auth/logout",
+                token,
+                JSONObject()
+            )
         }
+    }
 
     private fun request(
         method: String,
@@ -251,49 +610,79 @@ object AdminApi {
         token: String? = null,
         body: JSONObject? = null
     ): JSONObject {
-        val c = (
-            URL(base() + path)
-                .openConnection() as HttpURLConnection
-            ).apply {
-                requestMethod = method
-                connectTimeout = 12_000
-                readTimeout = 25_000
-                setRequestProperty("Accept", "application/json")
-                setRequestProperty(
-                    "Content-Type",
-                    "application/json; charset=utf-8"
-                )
-                if (!token.isNullOrBlank()) {
+        val c =
+            (
+                URL(
+                    base() + path
+                ).openConnection()
+                    as HttpURLConnection
+                ).apply {
+                    requestMethod = method
+                    connectTimeout = 12_000
+                    readTimeout = 25_000
+
                     setRequestProperty(
-                        "Authorization",
-                        "Bearer $token"
+                        "Accept",
+                        "application/json"
                     )
+
+                    setRequestProperty(
+                        "Content-Type",
+                        "application/json; charset=utf-8"
+                    )
+
+                    if (
+                        !token.isNullOrBlank()
+                    ) {
+                        setRequestProperty(
+                            "Authorization",
+                            "Bearer $token"
+                        )
+                    }
+
+                    if (body != null) {
+                        doOutput = true
+                    }
                 }
-                if (body != null) doOutput = true
-            }
 
         try {
             if (body != null) {
                 c.outputStream
-                    .bufferedWriter(Charsets.UTF_8)
-                    .use { it.write(body.toString()) }
+                    .bufferedWriter(
+                        Charsets.UTF_8
+                    )
+                    .use {
+                        it.write(
+                            body.toString()
+                        )
+                    }
             }
 
-            val status = c.responseCode
-            val raw = (
-                if (status in 200..299) {
-                    c.inputStream
-                } else {
-                    c.errorStream
-                }
-                )
-                ?.bufferedReader()
-                ?.use { it.readText() }
-                .orEmpty()
+            val status =
+                c.responseCode
+
+            val raw =
+                (
+                    if (
+                        status in 200..299
+                    ) {
+                        c.inputStream
+                    } else {
+                        c.errorStream
+                    }
+                    )
+                    ?.bufferedReader()
+                    ?.use {
+                        it.readText()
+                    }
+                    .orEmpty()
 
             val j =
-                if (raw.isBlank()) JSONObject()
-                else JSONObject(raw)
+                if (raw.isBlank()) {
+                    JSONObject()
+                } else {
+                    JSONObject(raw)
+                }
 
             if (
                 status !in 200..299 ||
@@ -304,7 +693,10 @@ object AdminApi {
             ) {
                 throw AdminApiException(
                     status,
-                    j.optString("error", "خطای سرور")
+                    j.optString(
+                        "error",
+                        "خطای سرور"
+                    )
                 )
             }
 
@@ -314,76 +706,176 @@ object AdminApi {
         }
     }
 
-    private fun parseMembers(a: JSONArray?) = buildList {
+    private fun parseMembers(
+        a: JSONArray?
+    ) = buildList {
         if (a != null) {
-            for (i in 0 until a.length()) {
-                val j = a.getJSONObject(i)
+            for (
+                i in 0 until a.length()
+            ) {
+                val j =
+                    a.getJSONObject(i)
+
                 add(
                     AdminMember(
-                        id = j.optLong("id"),
-                        fullName = j.optString("full_name"),
-                        mobile = j.optString("mobile"),
-                        block = j.optString("block"),
-                        unitNumber = j.optString("unit_number"),
-                        relation = j.optString("relation_type")
+                        id =
+                            j.optLong("id"),
+                        fullName =
+                            j.optString(
+                                "full_name"
+                            ),
+                        mobile =
+                            j.optString(
+                                "mobile"
+                            ),
+                        block =
+                            j.optString(
+                                "block"
+                            ),
+                        unitNumber =
+                            j.optString(
+                                "unit_number"
+                            ),
+                        relation =
+                            j.optString(
+                                "relation_type"
+                            )
                     )
                 )
             }
         }
     }
 
-    private fun parsePayments(a: JSONArray?) = buildList {
+    private fun parsePayments(
+        a: JSONArray?
+    ) = buildList {
         if (a != null) {
-            for (i in 0 until a.length()) {
-                val j = a.getJSONObject(i)
+            for (
+                i in 0 until a.length()
+            ) {
+                val j =
+                    a.getJSONObject(i)
+
                 add(
                     AdminPayment(
-                        id = j.optLong("id"),
-                        fullName = j.optString("full_name"),
-                        unitNumber = j.optString("unit_number"),
-                        block = j.optString("block"),
-                        chargeTitle = j.optString("charge_title"),
-                        amount = j.optLong("amount"),
-                        referenceId = j.optString("reference_id"),
-                        status = j.optString("status")
+                        id =
+                            j.optLong("id"),
+                        fullName =
+                            j.optString(
+                                "full_name"
+                            ),
+                        unitNumber =
+                            j.optString(
+                                "unit_number"
+                            ),
+                        block =
+                            j.optString(
+                                "block"
+                            ),
+                        chargeTitle =
+                            j.optString(
+                                "charge_title"
+                            ),
+                        amount =
+                            j.optLong(
+                                "amount"
+                            ),
+                        referenceId =
+                            j.optString(
+                                "reference_id"
+                            ),
+                        status =
+                            j.optString(
+                                "status"
+                            )
                     )
                 )
             }
         }
     }
 
-    private fun parseRequests(a: JSONArray?) = buildList {
+    private fun parseRequests(
+        a: JSONArray?
+    ) = buildList {
         if (a != null) {
-            for (i in 0 until a.length()) {
-                val j = a.getJSONObject(i)
+            for (
+                i in 0 until a.length()
+            ) {
+                val j =
+                    a.getJSONObject(i)
+
                 add(
                     AdminRequest(
-                        id = j.optLong("id"),
-                        fullName = j.optString("full_name"),
-                        unitNumber = j.optString("unit_number"),
-                        block = j.optString("block"),
-                        title = j.optString("title"),
-                        category = j.optString("category"),
-                        status = j.optString("status")
+                        id =
+                            j.optLong("id"),
+                        fullName =
+                            j.optString(
+                                "full_name"
+                            ),
+                        unitNumber =
+                            j.optString(
+                                "unit_number"
+                            ),
+                        block =
+                            j.optString(
+                                "block"
+                            ),
+                        title =
+                            j.optString(
+                                "title"
+                            ),
+                        category =
+                            j.optString(
+                                "category"
+                            ),
+                        status =
+                            j.optString(
+                                "status"
+                            )
                     )
                 )
             }
         }
     }
 
-    private fun parseCharges(a: JSONArray?) = buildList {
+    private fun parseCharges(
+        a: JSONArray?
+    ) = buildList {
         if (a != null) {
-            for (i in 0 until a.length()) {
-                val j = a.getJSONObject(i)
+            for (
+                i in 0 until a.length()
+            ) {
+                val j =
+                    a.getJSONObject(i)
+
                 add(
                     AdminCharge(
-                        id = j.optLong("id"),
-                        title = j.optString("title"),
-                        unitNumber = j.optString("unit_number"),
-                        block = j.optString("block"),
-                        amount = j.optLong("amount"),
-                        paidAmount = j.optLong("paid_amount"),
-                        status = j.optString("status")
+                        id =
+                            j.optLong("id"),
+                        title =
+                            j.optString(
+                                "title"
+                            ),
+                        unitNumber =
+                            j.optString(
+                                "unit_number"
+                            ),
+                        block =
+                            j.optString(
+                                "block"
+                            ),
+                        amount =
+                            j.optLong(
+                                "amount"
+                            ),
+                        paidAmount =
+                            j.optLong(
+                                "paid_amount"
+                            ),
+                        status =
+                            j.optString(
+                                "status"
+                            )
                     )
                 )
             }
@@ -394,19 +886,50 @@ object AdminApi {
         a: JSONArray?
     ) = buildList {
         if (a != null) {
-            for (i in 0 until a.length()) {
-                val j = a.getJSONObject(i)
+            for (
+                i in 0 until a.length()
+            ) {
+                val j =
+                    a.getJSONObject(i)
+
                 add(
                     AdminOnlinePayment(
-                        invoiceId = j.optLong("invoice_id"),
-                        fullName = j.optString("full_name"),
-                        unitNumber = j.optString("unit_number"),
-                        block = j.optString("block"),
-                        chargeTitle = j.optString("charge_title"),
-                        amountToman = j.optLong("amount_toman"),
-                        status = j.optString("status"),
-                        receiptNo = j.optString("receipt_no"),
-                        createdAt = j.optString("created_at")
+                        invoiceId =
+                            j.optLong(
+                                "invoice_id"
+                            ),
+                        fullName =
+                            j.optString(
+                                "full_name"
+                            ),
+                        unitNumber =
+                            j.optString(
+                                "unit_number"
+                            ),
+                        block =
+                            j.optString(
+                                "block"
+                            ),
+                        chargeTitle =
+                            j.optString(
+                                "charge_title"
+                            ),
+                        amountToman =
+                            j.optLong(
+                                "amount_toman"
+                            ),
+                        status =
+                            j.optString(
+                                "status"
+                            ),
+                        receiptNo =
+                            j.optString(
+                                "receipt_no"
+                            ),
+                        createdAt =
+                            j.optString(
+                                "created_at"
+                            )
                     )
                 )
             }

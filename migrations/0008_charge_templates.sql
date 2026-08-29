@@ -1,0 +1,13 @@
+CREATE TABLE IF NOT EXISTS charge_templates (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  title TEXT NOT NULL,
+  amount INTEGER NOT NULL,
+  due_day INTEGER NOT NULL DEFAULT 10,
+  block TEXT,
+  is_active INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_charge_templates_active
+  ON charge_templates(is_active, id);

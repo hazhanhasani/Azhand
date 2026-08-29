@@ -274,7 +274,7 @@ private fun LoginScreen(
         )
 
         Text(
-            "اپلیکیشن مدیر مجتمع • نسخه ۰.۸.۴",
+            "اپلیکیشن مدیر مجتمع • نسخه ۰.۹.۰",
             color = Muted,
             fontSize = 12.sp
         )
@@ -451,7 +451,8 @@ private fun AdminApp(
 
                 AdminTab.MEMBERS -> MembersTab(
                     data = data,
-                    token = token
+                    token = token,
+                    onChanged = onChanged
                 )
 
                 AdminTab.MORE -> MoreTab(
@@ -560,6 +561,31 @@ private fun DashboardTab(
         hint = "فاکتورهای پرداخت‌نشده"
     )
 
+    Spacer(Modifier.height(14.dp))
+
+    SectionTitle(
+        "خلاصه مالی",
+        "جمع شارژها و وصولی کل مجتمع"
+    )
+
+    MoneyMetricCard(
+        title = "کل شارژ صادرشده",
+        value = summary?.totalBilled ?: 0L,
+        accent = Muted
+    )
+
+    MoneyMetricCard(
+        title = "مبلغ وصول‌شده",
+        value = summary?.totalPaid ?: 0L,
+        accent = Good
+    )
+
+    MoneyMetricCard(
+        title = "مانده قابل وصول",
+        value = summary?.totalDue ?: 0L,
+        accent = Gold
+    )
+
     Spacer(Modifier.height(16.dp))
 
     SectionTitle(
@@ -606,6 +632,277 @@ private fun PaymentsTab(
     onChanged: () -> Unit
 ) {
     val scope = rememberCoroutineScope()
+
+    var showChargeForm by remember {
+        mutableStateOf(false)
+    }
+    var periodKey by remember {
+        mutableStateOf("")
+    }
+    var chargeTitle by remember {
+        mutableStateOf("شارژ ماهانه")
+    }
+    var chargeAmount by remember {
+        mutableStateOf("")
+    }
+    var chargeDueDate by remember {
+        mutableStateOf("")
+    }
+    var chargeBlock by remember {
+        mutableStateOf("")
+    }
+    var chargeMessage by remember {
+        mutableStateOf<String?>(null)
+    }
+    var templateDueDay by remember {
+        mutableStateOf("10")
+    }
+    var templates by remember {
+        mutableStateOf<List<ChargeTemplate>>(
+            emptyList()
+        )
+    }
+
+    LaunchedEffect(token) {
+        templates = runCatching {
+            AdminApi.chargeTemplates(token)
+        }.getOrDefault(emptyList())
+    }
+
+    SectionTitle(
+        "صدور شارژ",
+        "صدور یکجای شارژ برای تمام واحدهای فعال"
+    )
+
+    Button(
+        onClick = {
+            showChargeForm = !showChargeForm
+        },
+        colors = ButtonDefaults.buttonColors(
+            containerColor = Gold,
+            contentColor = Navy
+        ),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Text(
+            if (showChargeForm) {
+                "بستن فرم صدور شارژ"
+            } else {
+                "＋ صدور شارژ ماهانه"
+            }
+        )
+    }
+
+    if (showChargeForm) {
+        Spacer(Modifier.height(10.dp))
+
+        FormCard {
+            OutlinedTextField(
+                value = periodKey,
+                onValueChange = {
+                    periodKey = it.take(40)
+                },
+                label = {
+                    Text("دوره، مثال 1405-07")
+                },
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Spacer(Modifier.height(8.dp))
+
+            OutlinedTextField(
+                value = chargeTitle,
+                onValueChange = {
+                    chargeTitle = it.take(100)
+                },
+                label = {
+                    Text("عنوان شارژ")
+                },
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Spacer(Modifier.height(8.dp))
+
+            OutlinedTextField(
+                value = chargeAmount,
+                onValueChange = {
+                    chargeAmount =
+                        it.filter(Char::isDigit)
+                },
+                label = {
+                    Text("مبلغ هر واحد - تومان")
+                },
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Number
+                ),
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Spacer(Modifier.height(8.dp))
+
+            OutlinedTextField(
+                value = chargeDueDate,
+                onValueChange = {
+                    chargeDueDate = it.take(20)
+                },
+                label = {
+                    Text("تاریخ سررسید YYYY-MM-DD")
+                },
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Spacer(Modifier.height(8.dp))
+
+            OutlinedTextField(
+                value = chargeBlock,
+                onValueChange = {
+                    chargeBlock = it.take(30)
+                },
+                label = {
+                    Text("فقط این بلوک - اختیاری")
+                },
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Spacer(Modifier.height(8.dp))
+
+            OutlinedTextField(
+                value = templateDueDay,
+                onValueChange = {
+                    templateDueDay =
+                        it.filter(Char::isDigit)
+                            .take(2)
+                },
+                label = {
+                    Text("روز سررسید الگو 1 تا 28")
+                },
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Number
+                ),
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Spacer(Modifier.height(10.dp))
+
+            OutlinedButton(
+                enabled =
+                    chargeTitle.isNotBlank() &&
+                        (chargeAmount.toLongOrNull() ?: 0L) > 0 &&
+                        (templateDueDay.toIntOrNull() ?: 0) in 1..28,
+                onClick = {
+                    val amount =
+                        chargeAmount.toLongOrNull()
+                            ?: return@OutlinedButton
+                    val dueDay =
+                        templateDueDay.toIntOrNull()
+                            ?: return@OutlinedButton
+
+                    scope.launch {
+                        try {
+                            AdminApi.saveChargeTemplate(
+                                token = token,
+                                title = chargeTitle,
+                                amount = amount,
+                                dueDay = dueDay,
+                                block = chargeBlock
+                            )
+                            templates =
+                                AdminApi.chargeTemplates(
+                                    token
+                                )
+                            chargeMessage =
+                                "الگوی شارژ ذخیره شد."
+                        } catch (e: Exception) {
+                            chargeMessage = e.message
+                        }
+                    }
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("ذخیره به‌عنوان الگوی شارژ")
+            }
+
+            Spacer(Modifier.height(10.dp))
+
+            Button(
+                enabled =
+                    periodKey.isNotBlank() &&
+                        chargeTitle.isNotBlank() &&
+                        (chargeAmount.toLongOrNull() ?: 0L) > 0,
+                onClick = {
+                    val amount =
+                        chargeAmount.toLongOrNull()
+                            ?: return@Button
+
+                    scope.launch {
+                        try {
+                            val result =
+                                AdminApi.createBulkCharges(
+                                    token = token,
+                                    periodKey = periodKey,
+                                    title = chargeTitle,
+                                    amount = amount,
+                                    dueDate = chargeDueDate,
+                                    block = chargeBlock
+                                )
+
+                            chargeMessage =
+                                "شارژ برای ${result.unitsTargeted} واحد صادر شد."
+
+                            onChanged()
+                        } catch (e: Exception) {
+                            chargeMessage = e.message
+                        }
+                    }
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("صدور برای واحدها")
+            }
+        }
+    }
+
+    if (templates.isNotEmpty()) {
+        Spacer(Modifier.height(12.dp))
+
+        SectionTitle(
+            "الگوهای شارژ",
+            "برای پرکردن سریع فرم لمس کن"
+        )
+
+        templates.take(6).forEach { template ->
+            OutlinedButton(
+                onClick = {
+                    chargeTitle = template.title
+                    chargeAmount =
+                        template.amount.toString()
+                    templateDueDay =
+                        template.dueDay.toString()
+                    chargeBlock =
+                        template.block
+                    showChargeForm = true
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 6.dp)
+            ) {
+                Text(
+                    "${template.title} • ${money(template.amount)}"
+                )
+            }
+        }
+    }
+
+    chargeMessage?.let {
+        Spacer(Modifier.height(8.dp))
+        InfoCard(
+            title = "نتیجه صدور شارژ",
+            body = it,
+            accent = Gold
+        )
+    }
+
+    Spacer(Modifier.height(18.dp))
 
     SectionTitle(
         "پرداخت‌های آنلاین",
@@ -696,12 +993,15 @@ private fun PaymentsTab(
                             Button(
                                 onClick = {
                                     scope.launch {
-                                        AdminApi.reviewPayment(
-                                            token,
-                                            payment.id,
-                                            "approved"
-                                        )
-                                        onChanged()
+                                        try {
+                                            AdminApi.reviewPayment(
+                                                token,
+                                                payment.id,
+                                                "approved"
+                                            )
+                                            onChanged()
+                                        } catch (_: Exception) {
+                                        }
                                     }
                                 },
                                 colors =
@@ -716,12 +1016,15 @@ private fun PaymentsTab(
                             OutlinedButton(
                                 onClick = {
                                     scope.launch {
-                                        AdminApi.reviewPayment(
-                                            token,
-                                            payment.id,
-                                            "rejected"
-                                        )
-                                        onChanged()
+                                        try {
+                                            AdminApi.reviewPayment(
+                                                token,
+                                                payment.id,
+                                                "rejected"
+                                            )
+                                            onChanged()
+                                        } catch (_: Exception) {
+                                        }
                                     }
                                 }
                             ) {
@@ -741,7 +1044,7 @@ private fun PaymentsTab(
         "مانده و وضعیت واحدها"
     )
 
-    data?.charges.orEmpty().take(20).forEach { charge ->
+    data?.charges.orEmpty().take(30).forEach { charge ->
         val remain =
             (charge.amount - charge.paidAmount)
                 .coerceAtLeast(0)
@@ -802,16 +1105,53 @@ private fun RequestsTab(
     onChanged: () -> Unit
 ) {
     val scope = rememberCoroutineScope()
+    var search by remember {
+        mutableStateOf("")
+    }
 
     SectionTitle(
         "درخواست‌های خدمات",
-        "پیگیری وضعیت درخواست ساکنین"
+        "جستجو و پیگیری وضعیت درخواست ساکنین"
     )
 
-    val requests = data?.requests.orEmpty()
+    OutlinedTextField(
+        value = search,
+        onValueChange = { search = it },
+        label = {
+            Text("جستجو درخواست یا ساکن")
+        },
+        singleLine = true,
+        modifier = Modifier.fillMaxWidth()
+    )
+
+    Spacer(Modifier.height(10.dp))
+
+    val q = search.trim()
+    val requests = data
+        ?.requests
+        .orEmpty()
+        .filter {
+            q.isBlank() ||
+                it.title.contains(
+                    q,
+                    ignoreCase = true
+                ) ||
+                it.fullName.contains(
+                    q,
+                    ignoreCase = true
+                ) ||
+                it.unitNumber.contains(
+                    q,
+                    ignoreCase = true
+                ) ||
+                it.category.contains(
+                    q,
+                    ignoreCase = true
+                )
+        }
 
     if (requests.isEmpty()) {
-        EmptyState("درخواستی وجود ندارد.")
+        EmptyState("درخواستی با این جستجو پیدا نشد.")
     } else {
         requests.forEach { request ->
             Card(
@@ -877,12 +1217,15 @@ private fun RequestsTab(
                             OutlinedButton(
                                 onClick = {
                                     scope.launch {
-                                        AdminApi.setRequestStatus(
-                                            token,
-                                            request.id,
-                                            "in_progress"
-                                        )
-                                        onChanged()
+                                        try {
+                                            AdminApi.setRequestStatus(
+                                                token,
+                                                request.id,
+                                                "in_progress"
+                                            )
+                                            onChanged()
+                                        } catch (_: Exception) {
+                                        }
                                     }
                                 }
                             ) {
@@ -892,12 +1235,15 @@ private fun RequestsTab(
                             Button(
                                 onClick = {
                                     scope.launch {
-                                        AdminApi.setRequestStatus(
-                                            token,
-                                            request.id,
-                                            "done"
-                                        )
-                                        onChanged()
+                                        try {
+                                            AdminApi.setRequestStatus(
+                                                token,
+                                                request.id,
+                                                "done"
+                                            )
+                                            onChanged()
+                                        } catch (_: Exception) {
+                                        }
                                     }
                                 }
                             ) {
@@ -914,31 +1260,258 @@ private fun RequestsTab(
 @Composable
 private fun MembersTab(
     data: AdminData?,
-    token: String
+    token: String,
+    onChanged: () -> Unit
 ) {
     val scope = rememberCoroutineScope()
+
+    var search by remember {
+        mutableStateOf("")
+    }
+    var showCreate by remember {
+        mutableStateOf(false)
+    }
+    var fullName by remember {
+        mutableStateOf("")
+    }
+    var mobile by remember {
+        mutableStateOf("")
+    }
+    var block by remember {
+        mutableStateOf("")
+    }
+    var unit by remember {
+        mutableStateOf("")
+    }
+    var relation by remember {
+        mutableStateOf("owner")
+    }
     var issuedCode by remember {
+        mutableStateOf<String?>(null)
+    }
+    var message by remember {
         mutableStateOf<String?>(null)
     }
 
     SectionTitle(
         "ساکنین و واحدها",
-        "مدیریت دسترسی کاربران"
+        "ثبت عضو جدید، جستجو و مدیریت دسترسی"
     )
 
+    Button(
+        onClick = {
+            showCreate = !showCreate
+        },
+        colors = ButtonDefaults.buttonColors(
+            containerColor = Gold,
+            contentColor = Navy
+        ),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Text(
+            if (showCreate) {
+                "بستن فرم ثبت عضو"
+            } else {
+                "＋ ثبت ساکن / مالک جدید"
+            }
+        )
+    }
+
+    if (showCreate) {
+        Spacer(Modifier.height(10.dp))
+
+        FormCard {
+            OutlinedTextField(
+                value = fullName,
+                onValueChange = {
+                    fullName = it.take(100)
+                },
+                label = {
+                    Text("نام و نام خانوادگی")
+                },
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Spacer(Modifier.height(8.dp))
+
+            OutlinedTextField(
+                value = mobile,
+                onValueChange = {
+                    mobile =
+                        it.filter(Char::isDigit)
+                            .take(11)
+                },
+                label = {
+                    Text("شماره موبایل")
+                },
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Phone
+                ),
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Spacer(Modifier.height(8.dp))
+
+            OutlinedTextField(
+                value = block,
+                onValueChange = {
+                    block = it.take(30)
+                },
+                label = {
+                    Text("بلوک - اختیاری")
+                },
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Spacer(Modifier.height(8.dp))
+
+            OutlinedTextField(
+                value = unit,
+                onValueChange = {
+                    unit = it.take(30)
+                },
+                label = {
+                    Text("شماره واحد")
+                },
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Spacer(Modifier.height(10.dp))
+
+            Text(
+                "نوع عضویت",
+                color = Muted,
+                fontSize = 11.sp
+            )
+
+            Spacer(Modifier.height(6.dp))
+
+            Row(
+                horizontalArrangement =
+                    Arrangement.spacedBy(6.dp)
+            ) {
+                RelationChip(
+                    label = "مالک",
+                    selected = relation == "owner"
+                ) {
+                    relation = "owner"
+                }
+
+                RelationChip(
+                    label = "مستأجر",
+                    selected = relation == "tenant"
+                ) {
+                    relation = "tenant"
+                }
+
+                RelationChip(
+                    label = "ساکن",
+                    selected = relation == "resident"
+                ) {
+                    relation = "resident"
+                }
+            }
+
+            Spacer(Modifier.height(12.dp))
+
+            Button(
+                enabled =
+                    fullName.isNotBlank() &&
+                        mobile.length == 11 &&
+                        unit.isNotBlank(),
+                onClick = {
+                    scope.launch {
+                        try {
+                            val result =
+                                AdminApi.createMember(
+                                    token = token,
+                                    fullName = fullName,
+                                    mobile = mobile,
+                                    block = block,
+                                    unitNumber = unit,
+                                    relation = relation
+                                )
+
+                            issuedCode =
+                                result.accessCode
+                            message =
+                                "عضو و واحد با موفقیت ثبت شدند."
+
+                            fullName = ""
+                            mobile = ""
+                            block = ""
+                            unit = ""
+                            onChanged()
+                        } catch (e: Exception) {
+                            message = e.message
+                        }
+                    }
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("ثبت و صدور کد ورود")
+            }
+        }
+    }
+
     issuedCode?.let {
+        Spacer(Modifier.height(10.dp))
+
         InfoCard(
             title = "کد ورود جدید",
             body = it,
             accent = Gold
         )
-        Spacer(Modifier.height(10.dp))
     }
 
-    val members = data?.members.orEmpty()
+    message?.let {
+        Spacer(Modifier.height(8.dp))
+        Text(
+            it,
+            color = Gold,
+            fontSize = 12.sp
+        )
+    }
+
+    Spacer(Modifier.height(14.dp))
+
+    OutlinedTextField(
+        value = search,
+        onValueChange = {
+            search = it
+        },
+        label = {
+            Text("جستجو نام، موبایل یا واحد")
+        },
+        singleLine = true,
+        modifier = Modifier.fillMaxWidth()
+    )
+
+    Spacer(Modifier.height(12.dp))
+
+    val q = search.trim()
+    val members = data
+        ?.members
+        .orEmpty()
+        .filter {
+            q.isBlank() ||
+                it.fullName.contains(
+                    q,
+                    ignoreCase = true
+                ) ||
+                it.mobile.contains(q) ||
+                it.unitNumber.contains(
+                    q,
+                    ignoreCase = true
+                ) ||
+                it.block.contains(
+                    q,
+                    ignoreCase = true
+                )
+        }
 
     if (members.isEmpty()) {
-        EmptyState("عضوی ثبت نشده است.")
+        EmptyState("عضوی با این جستجو پیدا نشد.")
     } else {
         members.forEach { member ->
             Card(
@@ -978,11 +1551,15 @@ private fun MembersTab(
                     OutlinedButton(
                         onClick = {
                             scope.launch {
-                                issuedCode =
-                                    AdminApi.resetAccessCode(
-                                        token,
-                                        member.id
-                                    )
+                                try {
+                                    issuedCode =
+                                        AdminApi.resetAccessCode(
+                                            token,
+                                            member.id
+                                        )
+                                } catch (e: Exception) {
+                                    message = e.message
+                                }
                             }
                         },
                         modifier = Modifier.fillMaxWidth()
@@ -991,6 +1568,37 @@ private fun MembersTab(
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun RelationChip(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    if (selected) {
+        Button(
+            onClick = onClick,
+            colors = ButtonDefaults.buttonColors(
+                containerColor = Gold,
+                contentColor = Navy
+            )
+        ) {
+            Text(
+                label,
+                fontSize = 11.sp
+            )
+        }
+    } else {
+        OutlinedButton(
+            onClick = onClick
+        ) {
+            Text(
+                label,
+                fontSize = 11.sp
+            )
         }
     }
 }
@@ -1529,6 +2137,46 @@ private fun MetricCard(
                 color = Gold,
                 fontWeight = FontWeight.Bold,
                 fontSize = 24.sp
+            )
+        }
+    }
+}
+
+@Composable
+private fun MoneyMetricCard(
+    title: String,
+    value: Long,
+    accent: Color
+) {
+    Card(
+        colors = CardDefaults.cardColors(
+            containerColor = Surface2
+        ),
+        shape = RoundedCornerShape(18.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 8.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(15.dp),
+            horizontalArrangement =
+                Arrangement.SpaceBetween,
+            verticalAlignment =
+                Alignment.CenterVertically
+        ) {
+            Text(
+                title,
+                color = Muted,
+                fontSize = 12.sp
+            )
+
+            Text(
+                money(value),
+                color = accent,
+                fontWeight = FontWeight.Bold,
+                fontSize = 16.sp
             )
         }
     }
