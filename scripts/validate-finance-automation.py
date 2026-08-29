@@ -22,7 +22,7 @@ for item in [
         raise SystemExit(f"Migration missing {item}")
 
 for item in [
-    "async scheduled(event, env, ctx)",
+    "async scheduled(controller, env)",
     "runMonthlyBilling",
     "iranJalaliParts",
     'IRAN_TIME_ZONE = "Asia/Tehran"',

@@ -274,7 +274,7 @@ private fun LoginScreen(
         )
 
         Text(
-            "اپلیکیشن مدیر مجتمع • نسخه ۰.۹.۱",
+            "اپلیکیشن مدیر مجتمع • نسخه ۰.۹.۲",
             color = Muted,
             fontSize = 12.sp
         )

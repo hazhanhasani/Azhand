@@ -12,8 +12,8 @@ android {
         applicationId = "com.azhand.admin"
         minSdk = 26
         targetSdk = 35
-        versionCode = 25
-        versionName = "0.9.1"
+        versionCode = 26
+        versionName = "0.9.2"
 
         buildConfigField(
             "String",

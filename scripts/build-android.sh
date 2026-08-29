@@ -21,6 +21,8 @@ echo "Validating Jalali/Iran time..."
 python3 scripts/validate-jalali-time.py
 echo "Validating finance automation..."
 python3 scripts/validate-finance-automation.py
+echo "Validating deploy resilience..."
+python3 scripts/validate-deploy-resilience.py
 echo "Validating resident graphical UI..."
 python3 scripts/validate-resident-graphics.py
 echo "Validating Blupal callback flow..."

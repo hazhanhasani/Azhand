@@ -536,3 +536,10 @@ Migration:
 All v0.8.4 functionality remains: resident UI baseline, Blupal payment,
 callback page, native Admin app, shared launcher icon and separate update
 channels.
+
+
+## v0.9.2 — Worker deploy hotfix
+
+Run #27 reached and passed Android build, artifact upload, Resident signed update publish and Admin signed update publish, then failed at `Deploy Worker` with outer HTTP 502. D1 migration was therefore skipped.
+
+Hotfixes: scheduled handler simplified to Cloudflare's documented module form; Cron Schedules API update body fixed to the documented raw JSON array; future self-deploy uploads set compatibility_date 2026-08-29; future release workflow deploys print the response body and retry transient 429/5xx failures up to three times.
