@@ -11,6 +11,12 @@ echo "Validating Blupal integration..."
 python3 scripts/validate-blupal.py
 echo "Validating Kotlin structure..."
 python3 scripts/validate-kotlin-structure.py
+echo "Validating resident UI regression baseline..."
+python3 scripts/validate-resident-ui.py
+echo "Validating Admin app design/icon..."
+python3 scripts/validate-admin-ui.py
+echo "Validating Blupal callback flow..."
+python3 scripts/validate-blupal-callback.py
 echo "Validating D1 migration compatibility..."
 python3 scripts/validate-migrations.py
 

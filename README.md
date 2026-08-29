@@ -409,7 +409,7 @@ New APIs:
 No external push provider or payment gateway is required for this release.
 
 
-## v0.8.2 — Admin compile hotfix
+## v0.8.4 — Admin compile hotfix
 
 GitHub Actions Run #19 failed at `Build Android`.
 
@@ -418,7 +418,7 @@ Exact compiler failure:
 - all `AdminApp/Home/Payments/Requests/Members/More` unresolved errors were
   cascading parser errors from that missing brace.
 
-v0.8.2:
+v0.8.4:
 - rewrites Admin Login as normal multi-line Kotlin;
 - adds `validate-kotlin-structure.py` before Gradle;
 - Resident and Admin app are both versionCode 20;
@@ -428,7 +428,7 @@ v0.8.2:
   manual `/setup` or second ZIP upload.
 
 
-## v0.8.2 — D1 migration and signing transition hotfix
+## v0.8.4 — D1 migration and signing transition hotfix
 
 GitHub Actions Run #20:
 - Resident + Admin debug builds succeeded.
@@ -452,3 +452,60 @@ Fixes:
 - build script resolves both legacy and current keystore paths;
 - add a migration compatibility test that rejects CREATE TRIGGER before build;
 - new workflow prints the D1 endpoint response body when migration fails.
+
+
+## v0.8.4 — Resident UI regression recovery
+
+The resident Android UI was unintentionally simplified in v0.8.0 while
+Blupal and the native Admin app were introduced.
+
+v0.8.4 uses the complete v0.7.0 resident UI as the visual/functional baseline
+and merges all newer backend capabilities on top of it.
+
+Restored:
+- full ScreenContainer-based design;
+- original tab identity instead of generic dot icons;
+- Home dashboard cards and MiniStat blocks;
+- full manual-payment submission and history UI;
+- service request dialog/history;
+- personal notifications and announcements;
+- Account profile UI;
+- manual updater status, retry button, foreground re-check;
+- original reusable NoticeCard/ProfileLine/SectionTitle components.
+
+Preserved/merged:
+- Blupal online payment creation;
+- exact Rial final amount;
+- payment-link launch;
+- pending payment status re-check;
+- Blupal receipts;
+- Admin Android app;
+- D1 migrations;
+- current Worker and release pipeline.
+
+New CI guard:
+`scripts/validate-resident-ui.py`
+
+The release now fails if core resident UI/functionality is accidentally
+removed again.
+
+
+## v0.8.4 — Admin redesign + shared icon + Blupal callback UX
+
+Admin Android:
+- exact same launcher icon bytes as the resident app at all densities;
+- polished Azhand Navy/Gold login and dashboard;
+- app logo shown on login and header;
+- emoji-based navigation instead of generic dots;
+- overview metrics, online Blupal payments, manual payments, charges,
+  service requests and residents;
+- Blupal setup card shows both Webhook and Azhand callback page.
+
+Blupal callback:
+- new migration `0007_blupal_callback.sql`;
+- short-lived opaque callback session, raw token never stored in D1;
+- new `/payments/blupal/callback?token=...` branded page;
+- new `/api/payments/blupal/callback-status` public safe status endpoint;
+- callback page polls status and re-verifies PENDING invoices server-to-server;
+- resident Android and PWA open the Azhand callback page first;
+- no API key or resident bearer token is exposed in the callback URL.
