@@ -24,7 +24,10 @@ data class ChargeData(
     val amount: Long,
     val paidAmount: Long,
     val status: String,
-    val dueDate: String
+    val dueDate: String,
+    val payerRelation: String,
+    val payerName: String,
+    val billingSource: String
 )
 
 data class AnnouncementData(
@@ -93,10 +96,14 @@ data class BlupalInvoiceData(
 )
 
 data class DashboardData(
+    val iranNow: String,
     val profile: ProfileData,
     val totalDue: Long,
     val currentChargeTitle: String,
     val currentChargeAmount: Long,
+    val currentChargeDueDate: String,
+    val currentChargePayerRelation: String,
+    val currentChargePayerName: String,
     val openRequests: Int,
     val charges: List<ChargeData>,
     val announcements: List<AnnouncementData>,
@@ -140,6 +147,7 @@ object ApiClient {
             val summary = json.getJSONObject("summary")
 
             DashboardData(
+                iranNow = json.optString("iran_now"),
                 profile = ProfileData(
                     fullName = p.optString("full_name"),
                     mobile = p.optString("mobile"),
@@ -151,6 +159,9 @@ object ApiClient {
                 totalDue = summary.optLong("total_due", 0L),
                 currentChargeTitle = summary.optString("current_charge_title"),
                 currentChargeAmount = summary.optLong("current_charge_amount", 0L),
+                currentChargeDueDate = summary.optString("current_charge_due_date"),
+                currentChargePayerRelation = summary.optString("current_charge_payer_relation"),
+                currentChargePayerName = summary.optString("current_charge_payer_name"),
                 openRequests = summary.optInt("open_requests", 0),
                 charges = parseCharges(json.optJSONArray("charges")),
                 announcements = parseAnnouncements(json.optJSONArray("announcements")),
@@ -320,7 +331,10 @@ object ApiClient {
                         amount = j.optLong("amount"),
                         paidAmount = j.optLong("paid_amount"),
                         status = j.optString("status"),
-                        dueDate = j.optString("due_date")
+                        dueDate = j.optString("due_date"),
+                        payerRelation = j.optString("payer_relation"),
+                        payerName = j.optString("payer_name"),
+                        billingSource = j.optString("billing_source")
                     )
                 )
             }

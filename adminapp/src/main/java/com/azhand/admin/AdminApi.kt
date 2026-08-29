@@ -16,7 +16,14 @@ data class AdminSummary(
     val totalPaid: Long,
     val totalDue: Long,
     val paidCharges: Int,
-    val openCharges: Int
+    val openCharges: Int,
+    val totalExpenses: Long,
+    val initialBalance: Long,
+    val buildingBalance: Long,
+    val ownerMonthlyCharge: Long,
+    val tenantMonthlyCharge: Long,
+    val autoBillingEnabled: Boolean,
+    val dueDay: Int
 )
 
 data class AdminMember(
@@ -56,7 +63,11 @@ data class AdminCharge(
     val block: String,
     val amount: Long,
     val paidAmount: Long,
-    val status: String
+    val status: String,
+    val dueDate: String,
+    val payerRelation: String,
+    val payerName: String,
+    val billingSource: String
 )
 
 data class AdminOnlinePayment(
@@ -94,6 +105,28 @@ data class ChargeTemplate(
     val block: String
 )
 
+data class FinanceSettings(
+    val initialBalance: Long,
+    val ownerMonthlyCharge: Long,
+    val tenantMonthlyCharge: Long,
+    val autoBillingEnabled: Boolean,
+    val dueDay: Int,
+    val totalCollected: Long,
+    val totalExpenses: Long,
+    val currentBalance: Long,
+    val updatedAt: String,
+    val iranNow: String
+)
+
+data class BillingRunResult(
+    val periodKey: String,
+    val title: String,
+    val dueDate: String,
+    val unitsBilled: Int,
+    val unitsSkipped: Int,
+    val iranNow: String
+)
+
 data class BlupalIntegration(
     val configured: Boolean,
     val mode: String,
@@ -102,6 +135,7 @@ data class BlupalIntegration(
 )
 
 data class AdminData(
+    val iranNow: String,
     val summary: AdminSummary,
     val members: List<AdminMember>,
     val payments: List<AdminPayment>,
@@ -143,6 +177,7 @@ object AdminApi {
         val s = j.getJSONObject("summary")
 
         AdminData(
+            iranNow = j.optString("iran_now"),
             summary = AdminSummary(
                 members = s.optInt("members"),
                 units = s.optInt("units"),
@@ -159,7 +194,21 @@ object AdminApi {
                 paidCharges =
                     s.optInt("paid_charges"),
                 openCharges =
-                    s.optInt("open_charges")
+                    s.optInt("open_charges"),
+                totalExpenses =
+                    s.optLong("total_expenses"),
+                initialBalance =
+                    s.optLong("initial_balance"),
+                buildingBalance =
+                    s.optLong("building_balance"),
+                ownerMonthlyCharge =
+                    s.optLong("owner_monthly_charge"),
+                tenantMonthlyCharge =
+                    s.optLong("tenant_monthly_charge"),
+                autoBillingEnabled =
+                    s.optBoolean("auto_billing_enabled"),
+                dueDay =
+                    s.optInt("due_day", 10)
             ),
             members =
                 parseMembers(
@@ -419,6 +468,139 @@ object AdminApi {
                     block
                 )
         ).optLong("id")
+    }
+
+    suspend fun financeSettings(
+        token: String
+    ): FinanceSettings = withContext(Dispatchers.IO) {
+        val j = request(
+            "GET",
+            "/api/admin/finance-settings",
+            token
+        ).getJSONObject("settings")
+
+        FinanceSettings(
+            initialBalance =
+                j.optLong("initial_balance"),
+            ownerMonthlyCharge =
+                j.optLong("owner_monthly_charge"),
+            tenantMonthlyCharge =
+                j.optLong("tenant_monthly_charge"),
+            autoBillingEnabled =
+                j.optBoolean("auto_billing_enabled"),
+            dueDay =
+                j.optInt("due_day", 10),
+            totalCollected =
+                j.optLong("total_collected"),
+            totalExpenses =
+                j.optLong("total_expenses"),
+            currentBalance =
+                j.optLong("current_balance"),
+            updatedAt =
+                j.optString("updated_at"),
+            iranNow =
+                j.optString("iran_now")
+        )
+    }
+
+    suspend fun saveFinanceSettings(
+        token: String,
+        initialBalance: Long,
+        ownerMonthlyCharge: Long,
+        tenantMonthlyCharge: Long,
+        autoBillingEnabled: Boolean,
+        dueDay: Int
+    ): FinanceSettings = withContext(Dispatchers.IO) {
+        val j = request(
+            "POST",
+            "/api/admin/finance-settings",
+            token,
+            JSONObject()
+                .put(
+                    "initial_balance",
+                    initialBalance
+                )
+                .put(
+                    "owner_monthly_charge",
+                    ownerMonthlyCharge
+                )
+                .put(
+                    "tenant_monthly_charge",
+                    tenantMonthlyCharge
+                )
+                .put(
+                    "auto_billing_enabled",
+                    autoBillingEnabled
+                )
+                .put(
+                    "due_day",
+                    dueDay
+                )
+        ).getJSONObject("settings")
+
+        FinanceSettings(
+            initialBalance =
+                j.optLong("initial_balance"),
+            ownerMonthlyCharge =
+                j.optLong("owner_monthly_charge"),
+            tenantMonthlyCharge =
+                j.optLong("tenant_monthly_charge"),
+            autoBillingEnabled =
+                j.optBoolean("auto_billing_enabled"),
+            dueDay =
+                j.optInt("due_day", 10),
+            totalCollected =
+                j.optLong("total_collected"),
+            totalExpenses =
+                j.optLong("total_expenses"),
+            currentBalance =
+                j.optLong("current_balance"),
+            updatedAt =
+                j.optString("updated_at"),
+            iranNow =
+                j.optString("iran_now")
+        )
+    }
+
+    suspend fun runMonthlyBilling(
+        token: String
+    ): BillingRunResult = withContext(Dispatchers.IO) {
+        val j = request(
+            "POST",
+            "/api/admin/billing/run-now",
+            token,
+            JSONObject()
+        )
+
+        BillingRunResult(
+            periodKey =
+                j.optString("period_key"),
+            title =
+                j.optString("title"),
+            dueDate =
+                j.optString("due_date"),
+            unitsBilled =
+                j.optInt("units_billed"),
+            unitsSkipped =
+                j.optInt("units_skipped"),
+            iranNow =
+                j.optString("iran_now")
+        )
+    }
+
+    suspend fun deleteCharge(
+        token: String,
+        chargeId: Long
+    ) = withContext(Dispatchers.IO) {
+        request(
+            "POST",
+            "/api/admin/charges/delete",
+            token,
+            JSONObject().put(
+                "charge_id",
+                chargeId
+            )
+        )
     }
 
     suspend fun reviewPayment(
@@ -875,6 +1057,22 @@ object AdminApi {
                         status =
                             j.optString(
                                 "status"
+                            ),
+                        dueDate =
+                            j.optString(
+                                "due_date"
+                            ),
+                        payerRelation =
+                            j.optString(
+                                "payer_relation"
+                            ),
+                        payerName =
+                            j.optString(
+                                "payer_name"
+                            ),
+                        billingSource =
+                            j.optString(
+                                "billing_source"
                             )
                     )
                 )

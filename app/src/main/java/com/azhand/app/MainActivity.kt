@@ -5,9 +5,11 @@ import android.content.Intent
 import android.net.Uri
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -16,8 +18,10 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.LayoutDirection
@@ -62,11 +66,11 @@ class MainActivity : ComponentActivity() {
 }
 
 private enum class AppTab(val label: String, val emoji: String) {
-    HOME("خانه", "⌂"),
-    FINANCE("مالی", "﷼"),
-    SERVICES("خدمات", "⚙"),
-    NOTICES("اعلانات", "●"),
-    ACCOUNT("حساب", "◉")
+    HOME("خانه", "🏠"),
+    FINANCE("مالی", "💳"),
+    SERVICES("خدمات", "🛠"),
+    NOTICES("اعلانات", "🔔"),
+    ACCOUNT("حساب", "👤")
 }
 
 @Composable
@@ -466,7 +470,7 @@ private fun LoginScreen(onLoggedIn: (String) -> Unit) {
             }
         }
         Spacer(Modifier.height(18.dp))
-        Text("نسخه ۰.۹.۰", color = TextMuted, fontSize = 11.sp)
+        Text("نسخه ۰.۹.۱", color = TextMuted, fontSize = 11.sp)
     }
 }
 
@@ -583,78 +587,264 @@ private fun ScreenContainer(
     content: @Composable ColumnScope.() -> Unit
 ) {
     Column(
-        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 18.dp, vertical = 18.dp)
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(
+                horizontal = 18.dp,
+                vertical = 16.dp
+            )
     ) {
-        Text(title, color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 25.sp)
-        if (subtitle != null) {
-            Spacer(Modifier.height(6.dp))
-            Text(subtitle, color = TextMuted, fontSize = 13.sp)
+        Card(
+            colors = CardDefaults.cardColors(
+                containerColor = Surface
+            ),
+            shape = RoundedCornerShape(22.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(14.dp),
+                verticalAlignment =
+                    Alignment.CenterVertically
+            ) {
+                Card(
+                    shape = CircleShape,
+                    colors = CardDefaults.cardColors(
+                        containerColor = Surface2
+                    )
+                ) {
+                    Image(
+                        painter = painterResource(
+                            id = R.mipmap.ic_launcher
+                        ),
+                        contentDescription = "آژند",
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier
+                            .padding(6.dp)
+                            .size(48.dp)
+                    )
+                }
+
+                Spacer(Modifier.width(12.dp))
+
+                Column(
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(
+                        title,
+                        color = TextPrimary,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 23.sp
+                    )
+
+                    if (subtitle != null) {
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            subtitle,
+                            color = TextMuted,
+                            fontSize = 12.sp
+                        )
+                    }
+                }
+            }
         }
-        Spacer(Modifier.height(18.dp))
+
+        Spacer(Modifier.height(16.dp))
         content()
         Spacer(Modifier.height(26.dp))
     }
 }
 
 @Composable
-private fun HomeScreen(data: DashboardData?, onRefresh: () -> Unit) = ScreenContainer(
+private fun HomeScreen(
+    data: DashboardData?,
+    onRefresh: () -> Unit
+) = ScreenContainer(
     title = "آژند",
-    subtitle = "مجتمع تجاری، مسکونی • نسخه ۰.۹.۰"
+    subtitle = "مجتمع تجاری، مسکونی • نسخه ۰.۹.۱"
 ) {
     val profile = data?.profile
+
     val unitText = when {
         profile == null -> "واحد —"
-        profile.block.isBlank() -> "واحد ${profile.unitNumber}"
-        else -> "بلوک ${profile.block} • واحد ${profile.unitNumber}"
+        profile.block.isBlank() ->
+            "واحد ${profile.unitNumber}"
+        else ->
+            "بلوک ${profile.block} • واحد ${profile.unitNumber}"
     }
 
     Card(
-        colors = CardDefaults.cardColors(containerColor = Surface),
-        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = Surface
+        ),
+        shape = RoundedCornerShape(26.dp),
         modifier = Modifier.fillMaxWidth()
     ) {
-        Column(Modifier.padding(20.dp)) {
-            Text("سلام ${profile?.fullName.orEmpty()} 👋", color = TextMuted, fontSize = 13.sp)
-            Spacer(Modifier.height(4.dp))
-            Text(unitText, color = TextPrimary, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+        Column(
+            Modifier.padding(20.dp)
+        ) {
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement =
+                    Arrangement.SpaceBetween,
+                verticalAlignment =
+                    Alignment.CenterVertically
+            ) {
+                Column(
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(
+                        "سلام ${profile?.fullName.orEmpty()} 👋",
+                        color = TextMuted,
+                        fontSize = 13.sp
+                    )
+
+                    Spacer(Modifier.height(5.dp))
+
+                    Text(
+                        unitText,
+                        color = TextPrimary,
+                        fontSize = 22.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                Text(
+                    "🏙️",
+                    fontSize = 38.sp
+                )
+            }
+
+            if (!data?.iranNow.isNullOrBlank()) {
+                Spacer(Modifier.height(10.dp))
+                Text(
+                    "🕒 ${data?.iranNow}",
+                    color = Gold,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+
             Spacer(Modifier.height(18.dp))
-            Text("مانده حساب", color = TextMuted, fontSize = 13.sp)
-            Spacer(Modifier.height(4.dp))
-            val due = data?.totalDue ?: 0L
+
             Text(
-                if (due > 0) "${money(due)} بدهکار" else "تسویه",
-                color = if (due > 0) Danger else Success,
-                fontSize = 20.sp,
+                "مانده حساب",
+                color = TextMuted,
+                fontSize = 13.sp
+            )
+
+            Spacer(Modifier.height(5.dp))
+
+            val due = data?.totalDue ?: 0L
+
+            Text(
+                if (due > 0) {
+                    "${money(due)} بدهکار"
+                } else {
+                    "حساب تسویه است"
+                },
+                color =
+                    if (due > 0) Danger
+                    else Success,
+                fontSize = 22.sp,
                 fontWeight = FontWeight.Bold
             )
+
+            if (
+                !data?.currentChargePayerRelation
+                    .isNullOrBlank()
+            ) {
+                Spacer(Modifier.height(8.dp))
+
+                Text(
+                    "طرف حساب شارژ: ${
+                        relationFa(
+                            data?.currentChargePayerRelation
+                                .orEmpty()
+                        )
+                    } ${
+                        data?.currentChargePayerName
+                            ?.takeIf { it.isNotBlank() }
+                            ?.let { "• $it" }
+                            .orEmpty()
+                    }",
+                    color = TextMuted,
+                    fontSize = 11.sp
+                )
+            }
+
+            if (
+                !data?.currentChargeDueDate
+                    .isNullOrBlank()
+            ) {
+                Spacer(Modifier.height(4.dp))
+
+                Text(
+                    "سررسید: ${data?.currentChargeDueDate}",
+                    color = TextMuted,
+                    fontSize = 11.sp
+                )
+            }
+
             Spacer(Modifier.height(16.dp))
-            OutlinedButton(onClick = onRefresh, modifier = Modifier.fillMaxWidth()) {
-                Text("بروزرسانی اطلاعات")
+
+            OutlinedButton(
+                onClick = onRefresh,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("↻ بروزرسانی اطلاعات")
             }
         }
     }
 
     Spacer(Modifier.height(14.dp))
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+
+    Row(
+        Modifier.fillMaxWidth(),
+        horizontalArrangement =
+            Arrangement.spacedBy(12.dp)
+    ) {
         MiniStat(
             modifier = Modifier.weight(1f),
-            title = data?.currentChargeTitle?.ifBlank { "آخرین شارژ" } ?: "آخرین شارژ",
-            value = shortMoney(data?.currentChargeAmount ?: 0L),
+            title =
+                data?.currentChargeTitle
+                    ?.ifBlank { "آخرین شارژ" }
+                    ?: "آخرین شارژ",
+            value =
+                shortMoney(
+                    data?.currentChargeAmount
+                        ?: 0L
+                ),
             hint = "تومان"
         )
+
         MiniStat(
             modifier = Modifier.weight(1f),
             title = "درخواست باز",
-            value = (data?.openRequests ?: 0).toString(),
+            value =
+                (data?.openRequests ?: 0)
+                    .toString(),
             hint = "مورد"
         )
     }
 
     Spacer(Modifier.height(18.dp))
     SectionTitle("آخرین اعلان")
-    val latest = data?.announcements?.firstOrNull()
-    if (latest == null) EmptyCard("هنوز اعلانی ثبت نشده است.")
-    else NoticeCard(latest.title, latest.body, latest.publishedAt)
+
+    val latest =
+        data?.announcements?.firstOrNull()
+
+    if (latest == null) {
+        EmptyCard("هنوز اعلانی ثبت نشده است.")
+    } else {
+        NoticeCard(
+            latest.title,
+            latest.body,
+            latest.publishedAt
+        )
+    }
 }
 
 @Composable
@@ -723,7 +913,88 @@ private fun FinanceScreen(
                     }
 
                     Spacer(Modifier.height(8.dp))
-                    Text(money(remaining), color = TextMuted)
+
+                    val paidRatio =
+                        if (charge.amount > 0L) {
+                            (
+                                charge.paidAmount
+                                    .toFloat() /
+                                    charge.amount
+                                        .toFloat()
+                                ).coerceIn(
+                                    0f,
+                                    1f
+                                )
+                        } else {
+                            0f
+                        }
+
+                    LinearProgressIndicator(
+                        progress = {
+                            paidRatio
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(7.dp),
+                        color =
+                            if (remaining == 0L) {
+                                Success
+                            } else {
+                                Gold
+                            },
+                        trackColor = Surface2
+                    )
+
+                    Spacer(Modifier.height(9.dp))
+
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement =
+                            Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            "مانده ${money(remaining)}",
+                            color = TextMuted,
+                            fontSize = 12.sp
+                        )
+
+                        if (
+                            charge.dueDate
+                                .isNotBlank()
+                        ) {
+                            Text(
+                                "سررسید ${charge.dueDate}",
+                                color = TextMuted,
+                                fontSize = 11.sp
+                            )
+                        }
+                    }
+
+                    if (
+                        charge.payerRelation
+                            .isNotBlank()
+                    ) {
+                        Spacer(Modifier.height(6.dp))
+
+                        Text(
+                            "طرف حساب: ${
+                                relationFa(
+                                    charge.payerRelation
+                                )
+                            } ${
+                                charge.payerName
+                                    .takeIf {
+                                        it.isNotBlank()
+                                    }
+                                    ?.let {
+                                        "• $it"
+                                    }
+                                    .orEmpty()
+                            }",
+                            color = Gold,
+                            fontSize = 11.sp
+                        )
+                    }
 
                     if (remaining > 0L) {
                         Spacer(Modifier.height(12.dp))
@@ -1733,6 +2004,16 @@ private fun ProfileLine(label: String, value: String) {
         Text(value, color = TextPrimary, fontWeight = FontWeight.Medium)
     }
 }
+
+private fun relationFa(
+    relation: String
+): String =
+    when (relation) {
+        "owner" -> "مالک"
+        "tenant" -> "مستأجر"
+        "resident" -> "ساکن"
+        else -> "عضو"
+    }
 
 private fun money(value: Long): String =
     "${NumberFormat.getNumberInstance(Locale("fa", "IR")).format(value)} تومان"

@@ -274,7 +274,7 @@ private fun LoginScreen(
         )
 
         Text(
-            "اپلیکیشن مدیر مجتمع • نسخه ۰.۹.۰",
+            "اپلیکیشن مدیر مجتمع • نسخه ۰.۹.۱",
             color = Muted,
             fontSize = 12.sp
         )
@@ -418,6 +418,7 @@ private fun AdminApp(
                 )
         ) {
             BrandHeader(
+                iranNow = data?.iranNow.orEmpty(),
                 onRefresh = onChanged
             )
 
@@ -467,6 +468,7 @@ private fun AdminApp(
 
 @Composable
 private fun BrandHeader(
+    iranNow: String,
     onRefresh: () -> Unit
 ) {
     Row(
@@ -500,6 +502,14 @@ private fun BrandHeader(
                     color = Muted,
                     fontSize = 11.sp
                 )
+
+                if (iranNow.isNotBlank()) {
+                    Text(
+                        "🕒 $iranNow",
+                        color = Gold,
+                        fontSize = 10.sp
+                    )
+                }
             }
         }
 
@@ -584,6 +594,19 @@ private fun DashboardTab(
         title = "مانده قابل وصول",
         value = summary?.totalDue ?: 0L,
         accent = Gold
+    )
+
+    MoneyMetricCard(
+        title = "موجودی فعلی ساختمان",
+        value = summary?.buildingBalance ?: 0L,
+        accent =
+            if (
+                (summary?.buildingBalance ?: 0L) >= 0L
+            ) {
+                Good
+            } else {
+                Bad
+            }
     )
 
     Spacer(Modifier.height(16.dp))
@@ -703,7 +726,7 @@ private fun PaymentsTab(
                     periodKey = it.take(40)
                 },
                 label = {
-                    Text("دوره، مثال 1405-07")
+                    Text("دوره شمسی، مثال 1405-07")
                 },
                 modifier = Modifier.fillMaxWidth()
             )
@@ -746,7 +769,7 @@ private fun PaymentsTab(
                     chargeDueDate = it.take(20)
                 },
                 label = {
-                    Text("تاریخ سررسید YYYY-MM-DD")
+                    Text("تاریخ سررسید شمسی، مثال 1405-07-10")
                 },
                 modifier = Modifier.fillMaxWidth()
             )
@@ -1058,41 +1081,109 @@ private fun PaymentsTab(
                 .fillMaxWidth()
                 .padding(bottom = 8.dp)
         ) {
-            Row(
+            Column(
                 Modifier
                     .fillMaxWidth()
-                    .padding(14.dp),
-                horizontalArrangement =
-                    Arrangement.SpaceBetween
+                    .padding(14.dp)
             ) {
-                Column {
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement =
+                        Arrangement.SpaceBetween
+                ) {
+                    Column(
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text(
+                            charge.title,
+                            color = TextPrimary,
+                            fontWeight =
+                                FontWeight.SemiBold
+                        )
+
+                        Text(
+                            unitLabel(
+                                charge.block,
+                                charge.unitNumber
+                            ),
+                            color = Muted,
+                            fontSize = 11.sp
+                        )
+                    }
+
                     Text(
-                        charge.title,
-                        color = TextPrimary,
-                        fontWeight = FontWeight.SemiBold
+                        if (remain == 0L) {
+                            "تسویه"
+                        } else {
+                            money(remain)
+                        },
+                        color =
+                            if (remain == 0L) Good
+                            else Gold,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold
                     )
+                }
+
+                if (charge.dueDate.isNotBlank()) {
+                    Spacer(Modifier.height(5.dp))
                     Text(
-                        unitLabel(
-                            charge.block,
-                            charge.unitNumber
-                        ),
+                        "سررسید: ${charge.dueDate}",
                         color = Muted,
                         fontSize = 11.sp
                     )
                 }
 
-                Text(
-                    if (remain == 0L) {
-                        "تسویه"
-                    } else {
-                        money(remain)
-                    },
-                    color =
-                        if (remain == 0L) Good
-                        else Gold,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold
-                )
+                if (
+                    charge.payerRelation.isNotBlank()
+                ) {
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "طرف حساب: ${
+                            relationLabel(
+                                charge.payerRelation
+                            )
+                        } ${
+                            charge.payerName
+                                .takeIf {
+                                    it.isNotBlank()
+                                }
+                                ?.let { "• $it" }
+                                .orEmpty()
+                        }",
+                        color = Gold,
+                        fontSize = 11.sp
+                    )
+                }
+
+                if (
+                    charge.paidAmount == 0L &&
+                    remain > 0L
+                ) {
+                    Spacer(Modifier.height(9.dp))
+
+                    OutlinedButton(
+                        onClick = {
+                            scope.launch {
+                                try {
+                                    AdminApi.deleteCharge(
+                                        token,
+                                        charge.id
+                                    )
+                                    chargeMessage =
+                                        "شارژ حذف شد و بدهی واحد اصلاح شد."
+                                    onChanged()
+                                } catch (e: Exception) {
+                                    chargeMessage =
+                                        e.message
+                                }
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("حذف شارژ آزمایشی / اشتباه")
+                    }
+                }
             }
         }
     }
@@ -1614,9 +1705,31 @@ private fun MoreTab(
     var integration by remember {
         mutableStateOf<BlupalIntegration?>(null)
     }
-    var key by remember { mutableStateOf("") }
+    var finance by remember {
+        mutableStateOf<FinanceSettings?>(null)
+    }
+
+    var key by remember {
+        mutableStateOf("")
+    }
     var message by remember {
         mutableStateOf<String?>(null)
+    }
+
+    var initialBalance by remember {
+        mutableStateOf("")
+    }
+    var ownerCharge by remember {
+        mutableStateOf("")
+    }
+    var tenantCharge by remember {
+        mutableStateOf("")
+    }
+    var dueDay by remember {
+        mutableStateOf("10")
+    }
+    var autoBilling by remember {
+        mutableStateOf(true)
     }
 
     var expenseTitle by remember {
@@ -1639,11 +1752,258 @@ private fun MoreTab(
         mutableStateOf("")
     }
 
+    fun loadFinance() {
+        scope.launch {
+            finance = runCatching {
+                AdminApi.financeSettings(token)
+            }.getOrNull()
+
+            finance?.let {
+                initialBalance =
+                    it.initialBalance.toString()
+                ownerCharge =
+                    it.ownerMonthlyCharge.toString()
+                tenantCharge =
+                    it.tenantMonthlyCharge.toString()
+                dueDay =
+                    it.dueDay.toString()
+                autoBilling =
+                    it.autoBillingEnabled
+            }
+        }
+    }
+
     LaunchedEffect(Unit) {
         integration = runCatching {
             AdminApi.blupal(token)
         }.getOrNull()
+
+        finance = runCatching {
+            AdminApi.financeSettings(token)
+        }.getOrNull()
+
+        finance?.let {
+            initialBalance =
+                it.initialBalance.toString()
+            ownerCharge =
+                it.ownerMonthlyCharge.toString()
+            tenantCharge =
+                it.tenantMonthlyCharge.toString()
+            dueDay =
+                it.dueDay.toString()
+            autoBilling =
+                it.autoBillingEnabled
+        }
     }
+
+    SectionTitle(
+        "تنظیمات مالی ساختمان",
+        "موجودی اولیه و شارژ خودکار مالک / مستأجر"
+    )
+
+    finance?.let { current ->
+        MoneyMetricCard(
+            title = "موجودی فعلی ساختمان",
+            value = current.currentBalance,
+            accent =
+                if (current.currentBalance >= 0L) {
+                    Good
+                } else {
+                    Bad
+                }
+        )
+
+        MoneyMetricCard(
+            title = "جمع وصولی",
+            value = current.totalCollected,
+            accent = Good
+        )
+
+        MoneyMetricCard(
+            title = "جمع هزینه‌ها",
+            value = current.totalExpenses,
+            accent = Bad
+        )
+    }
+
+    FormCard {
+        OutlinedTextField(
+            value = initialBalance,
+            onValueChange = {
+                initialBalance =
+                    signedNumberInput(it)
+            },
+            label = {
+                Text("موجودی اولیه ساختمان - تومان")
+            },
+            keyboardOptions =
+                KeyboardOptions(
+                    keyboardType = KeyboardType.Number
+                ),
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        Spacer(Modifier.height(8.dp))
+
+        OutlinedTextField(
+            value = ownerCharge,
+            onValueChange = {
+                ownerCharge =
+                    it.filter(Char::isDigit)
+            },
+            label = {
+                Text("شارژ ماهانه مالک - تومان")
+            },
+            keyboardOptions =
+                KeyboardOptions(
+                    keyboardType = KeyboardType.Number
+                ),
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        Spacer(Modifier.height(8.dp))
+
+        OutlinedTextField(
+            value = tenantCharge,
+            onValueChange = {
+                tenantCharge =
+                    it.filter(Char::isDigit)
+            },
+            label = {
+                Text("شارژ ماهانه مستأجر - تومان")
+            },
+            keyboardOptions =
+                KeyboardOptions(
+                    keyboardType = KeyboardType.Number
+                ),
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        Spacer(Modifier.height(8.dp))
+
+        OutlinedTextField(
+            value = dueDay,
+            onValueChange = {
+                dueDay =
+                    it.filter(Char::isDigit)
+                        .take(2)
+            },
+            label = {
+                Text("روز سررسید شمسی ۱ تا ۲۸")
+            },
+            keyboardOptions =
+                KeyboardOptions(
+                    keyboardType = KeyboardType.Number
+                ),
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        Spacer(Modifier.height(10.dp))
+
+        OutlinedButton(
+            onClick = {
+                autoBilling = !autoBilling
+            },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(
+                if (autoBilling) {
+                    "✅ صدور خودکار اول هر ماه فعال است"
+                } else {
+                    "⏸ صدور خودکار اول هر ماه غیرفعال است"
+                }
+            )
+        }
+
+        Spacer(Modifier.height(10.dp))
+
+        Button(
+            enabled =
+                (initialBalance.toLongOrNull() != null) &&
+                    (ownerCharge.toLongOrNull() != null) &&
+                    (tenantCharge.toLongOrNull() != null) &&
+                    (dueDay.toIntOrNull() ?: 0) in 1..28,
+            onClick = {
+                scope.launch {
+                    try {
+                        finance =
+                            AdminApi.saveFinanceSettings(
+                                token = token,
+                                initialBalance =
+                                    initialBalance
+                                        .toLong(),
+                                ownerMonthlyCharge =
+                                    ownerCharge
+                                        .toLong(),
+                                tenantMonthlyCharge =
+                                    tenantCharge
+                                        .toLong(),
+                                autoBillingEnabled =
+                                    autoBilling,
+                                dueDay =
+                                    dueDay.toInt()
+                            )
+
+                        message =
+                            "تنظیمات مالی ذخیره شد."
+                        onChanged()
+                    } catch (e: Exception) {
+                        message = e.message
+                    }
+                }
+            },
+            colors = ButtonDefaults.buttonColors(
+                containerColor = Gold,
+                contentColor = Navy
+            ),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("ذخیره تنظیمات مالی")
+        }
+
+        Spacer(Modifier.height(8.dp))
+
+        OutlinedButton(
+            enabled =
+                (ownerCharge.toLongOrNull() ?: 0L) > 0L ||
+                    (tenantCharge.toLongOrNull() ?: 0L) > 0L,
+            onClick = {
+                scope.launch {
+                    try {
+                        val result =
+                            AdminApi.runMonthlyBilling(
+                                token
+                            )
+
+                        message =
+                            "شارژ ${result.periodKey}: ${
+                                result.unitsBilled
+                            } واحد صادر شد، ${
+                                result.unitsSkipped
+                            } واحد بدون طرف حساب/مبلغ رد شد."
+
+                        loadFinance()
+                        onChanged()
+                    } catch (e: Exception) {
+                        message = e.message
+                    }
+                }
+            },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("اجرای آزمایشی صدور شارژ همین ماه")
+        }
+
+        Spacer(Modifier.height(8.dp))
+
+        Text(
+            "قاعده خودکار: اگر مستأجر فعال برای واحد ثبت باشد مبلغ مستأجر اعمال می‌شود؛ در غیر این صورت مبلغ مالک. صدور واقعی روز اول هر ماه جلالی و بر اساس ساعت ایران انجام می‌شود.",
+            color = Muted,
+            fontSize = 11.sp
+        )
+    }
+
+    Spacer(Modifier.height(18.dp))
 
     SectionTitle(
         "درگاه بلوپال",
@@ -1694,7 +2054,11 @@ private fun MoreTab(
             Spacer(Modifier.height(7.dp))
 
             Text(
-                "حالت: ${integration?.mode?.ifBlank { "—" } ?: "—"}",
+                "حالت: ${
+                    integration?.mode
+                        ?.ifBlank { "—" }
+                        ?: "—"
+                }",
                 color = Muted,
                 fontSize = 12.sp
             )
@@ -1735,10 +2099,14 @@ private fun MoreTab(
                                 key
                             )
                             key = ""
-                            message = "کلید با موفقیت ذخیره شد."
-                            integration = runCatching {
-                                AdminApi.blupal(token)
-                            }.getOrNull()
+                            message =
+                                "کلید با موفقیت ذخیره شد."
+                            integration =
+                                runCatching {
+                                    AdminApi.blupal(
+                                        token
+                                    )
+                                }.getOrNull()
                         } catch (e: Exception) {
                             message = e.message
                         }
@@ -1755,13 +2123,16 @@ private fun MoreTab(
 
             integration
                 ?.callbackPage
-                ?.takeIf { it.isNotBlank() }
+                ?.takeIf {
+                    it.isNotBlank()
+                }
                 ?.let {
                     Spacer(Modifier.height(10.dp))
                     Text(
                         "صفحه بازگشت آژند",
                         color = TextPrimary,
-                        fontWeight = FontWeight.SemiBold,
+                        fontWeight =
+                            FontWeight.SemiBold,
                         fontSize = 12.sp
                     )
                     Text(
@@ -1773,13 +2144,16 @@ private fun MoreTab(
 
             integration
                 ?.webhookUrl
-                ?.takeIf { it.isNotBlank() }
+                ?.takeIf {
+                    it.isNotBlank()
+                }
                 ?.let {
                     Spacer(Modifier.height(8.dp))
                     Text(
                         "Webhook بلوپال",
                         color = TextPrimary,
-                        fontWeight = FontWeight.SemiBold,
+                        fontWeight =
+                            FontWeight.SemiBold,
                         fontSize = 12.sp
                     )
                     Text(
@@ -1795,7 +2169,7 @@ private fun MoreTab(
 
     SectionTitle(
         "ثبت هزینه مجتمع",
-        "افزودن هزینه جدید به گزارش مالی"
+        "همه تاریخ‌ها شمسی و ساعت سیستم ایران است"
     )
 
     FormCard {
@@ -1849,7 +2223,7 @@ private fun MoreTab(
                 expenseDate = it
             },
             label = {
-                Text("تاریخ YYYY-MM-DD")
+                Text("تاریخ شمسی، مثال 1405-07-12")
             },
             modifier = Modifier.fillMaxWidth()
         )
@@ -1877,6 +2251,7 @@ private fun MoreTab(
                         expenseCategory = ""
                         expenseAmount = ""
                         expenseDate = ""
+                        loadFinance()
                         onChanged()
                     } catch (e: Exception) {
                         message = e.message
@@ -1967,6 +2342,7 @@ private fun MoreTab(
         Text("خروج از حساب مدیریت")
     }
 }
+
 
 @Composable
 private fun OnlinePaymentAdminCard(
@@ -2275,6 +2651,21 @@ private fun StatusPill(
             )
         )
     }
+}
+
+private fun signedNumberInput(
+    value: String
+): String {
+    val trimmed = value.trim()
+
+    if (trimmed.startsWith("-")) {
+        return "-" +
+            trimmed
+                .drop(1)
+                .filter(Char::isDigit)
+    }
+
+    return trimmed.filter(Char::isDigit)
 }
 
 private fun money(value: Long): String =

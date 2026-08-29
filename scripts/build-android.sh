@@ -17,6 +17,12 @@ echo "Validating Admin app design/icon..."
 python3 scripts/validate-admin-ui.py
 echo "Validating Admin operational parity..."
 python3 scripts/validate-admin-operations.py
+echo "Validating Jalali/Iran time..."
+python3 scripts/validate-jalali-time.py
+echo "Validating finance automation..."
+python3 scripts/validate-finance-automation.py
+echo "Validating resident graphical UI..."
+python3 scripts/validate-resident-graphics.py
 echo "Validating Blupal callback flow..."
 python3 scripts/validate-blupal-callback.py
 echo "Validating D1 migration compatibility..."
